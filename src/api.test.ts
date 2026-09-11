@@ -12,7 +12,7 @@ const config: Config = {
   zohoRegion: "in",
   zohoEmployeeId: "employee",
   timezone: "Asia/Kolkata",
-  stateDir: "/tmp/synczc-test",
+  stateDir: "/tmp/zsync-test",
 };
 
 const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { "content-type": "application/json" } });
@@ -28,8 +28,8 @@ describe("configuration", () => {
       ZOHO_REFRESH_TOKEN: "refresh",
       ZOHO_REGION: "EU",
       ZOHO_EMPLOYEE_ID: "employee",
-      SYNCZC_TIMEZONE: "UTC",
-      SYNCZC_STATE_DIR: "/tmp/custom",
+      ZSYNC_TIMEZONE: "UTC",
+      ZSYNC_STATE_DIR: "/tmp/custom",
     };
     const loaded = loadConfig(env);
     expect(loaded.zohoRegion).toBe("eu");
@@ -74,12 +74,12 @@ describe("Zoho client", () => {
         return json({ response: { status: 0, result: rows, isNextAvailable: index === "0" } });
       }
       const index = new URL(url).searchParams.get("sIndex");
-      const rows = [{ erecno: "employee", timelogId: index === "0" ? "log-1" : "log-2", jobId: "job-1", workDate: "2026-09-10", hours: "01:30", totaltime: 5400, billingStatus: "billable", description: "[synczc:entry-1] work" }];
+      const rows = [{ erecno: "employee", timelogId: index === "0" ? "log-1" : "log-2", jobId: "job-1", workDate: "2026-09-10", hours: "01:30", totaltime: 5400, billingStatus: "billable", description: "[zsync:entry-1] work" }];
       return json({ response: { status: 0, result: rows, isNextAvailable: false } });
     };
     const zoho = createZoho(config, { fetch: fetcher, sleep: async () => {} });
     expect((await zoho.listJobs())).toHaveLength(201);
-    expect(await zoho.listLogs("2026-09-10", "2026-09-10")).toMatchObject([{ employeeId: "employee", minutes: 90, description: "[synczc:entry-1] work" }]);
+    expect(await zoho.listLogs("2026-09-10", "2026-09-10")).toMatchObject([{ employeeId: "employee", minutes: 90, description: "[zsync:entry-1] work" }]);
     expect(tokenCalls).toBe(1);
   });
 
@@ -93,7 +93,7 @@ describe("Zoho client", () => {
       return json({ response: { status: 0, result: [{ timeLogId: "log-1" }] } });
     };
     const zoho = createZoho(config, { fetch: fetcher, sleep: async () => {} });
-    const input = { employeeId: "employee", jobId: "job-1", date: "2026-09-10", minutes: 90, description: "[synczc:entry-1] work", billable: true };
+    const input = { employeeId: "employee", jobId: "job-1", date: "2026-09-10", minutes: 90, description: "[zsync:entry-1] work", billable: true };
     expect(await zoho.createLog(input)).toBe("log-1");
     await zoho.updateLog("log-1", input);
     expect(calls).toHaveLength(2);
@@ -102,7 +102,7 @@ describe("Zoho client", () => {
     expect(calls[0]!.body).toContain("user=employee");
     expect(calls[0]!.body).toContain("jobId=job-1");
     expect(calls[0]!.body).toContain("hours=01%3A30");
-    expect(calls[0]!.body).toContain("description=%5Bsynczc%3Aentry-1%5D+work");
+    expect(calls[0]!.body).toContain("description=%5Bzsync%3Aentry-1%5D+work");
     const errorFetcher = async (input: string | URL | Request) => String(input).includes("/oauth/v2/token") ? json({ access_token: "access", expires_in: 3600 }) : json({ response: { status: 1, message: "Permission denied" } });
     const failing = createZoho(config, { fetch: errorFetcher, sleep: async () => {} });
     await expect(failing.createLog(input)).rejects.toThrow("Permission denied");

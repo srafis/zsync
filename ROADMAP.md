@@ -1,11 +1,11 @@
-# synczc roadmap
+# zsync roadmap
 
 Build an interactive CLI that copies selected, completed Clockify entries into
 Zoho People time logs. Clockify is the source of truth. Repeated runs should
 recognize existing logs and avoid duplicates.
 
 Use Bun, TypeScript, and `@clack/prompts`. Develop, install dependencies, build,
-and test with Bun. The requested public command is `npx synczc`; verify package
+and test with Bun. The requested public command is `npx @srafis/zsync`; verify package
 runtime compatibility before release rather than assuming npx provides Bun.
 
 ## Implementation status
@@ -18,7 +18,7 @@ with an actionable error; uncertain writes are never automatically retried.
 
 ## User flow
 
-1. Run `npx synczc`.
+1. Run `npx @srafis/zsync`.
 2. Select a date range, with Today selected by default:
    - Today
    - Yesterday
@@ -130,7 +130,7 @@ reported, and rerunning after a failure safely resumes the remaining work.
 - [x] Add concise setup documentation and an example environment file containing
       placeholders only. Document OAuth setup, mappings, state location, precision,
       supported regions, and recovery from uncertain writes.
-- [x] Verify npm package-name availability for `synczc` and configure its bin entry.
+- [x] Configure the scoped package `@srafis/zsync` and `zsync` bin entry.
       Prefer a Node-compatible artifact built with Bun for the requested `npx`
       experience; test the package in an environment without Bun installed.
 - [ ] Publish only when explicitly requested. Until then, validate the packaged CLI

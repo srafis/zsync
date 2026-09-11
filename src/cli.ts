@@ -40,7 +40,7 @@ function automaticJob(entry: Entry, jobs: Job[]): string | undefined {
 export async function main(argv = process.argv.slice(2)): Promise<void> {
 	if (argv.includes("--help") || argv.includes("-h")) {
 		console.log(
-			`synczc — sync selected Clockify entries to Zoho People\n\nUsage: synczc [--demo | --connect | --help | --version]\n\nChoose a date range, select entries, review mappings, then confirm.\nExisting logs are unchecked by default. No background automation.\n\nRequired environment:\n  CLOCKIFY_API_KEY, CLOCKIFY_USER_ID, CLOCKIFY_WORKSPACE_ID\n  ZOHO_CLIENT_ID, ZOHO_CLIENT_SECRET\n\nZoho authorization is guided on first run. --connect reconnects.\nOptional: ZOHO_REFRESH_TOKEN, ZOHO_EMPLOYEE_ID, ZOHO_REGION, SYNCZC_TIMEZONE, SYNCZC_STATE_DIR, ZOHO_DATE_FORMAT\n\n--demo uses fictional data and never contacts either service.`,
+			`zsync — sync selected Clockify entries to Zoho People\n\nUsage: zsync [--demo | --connect | --help | --version]\n\nChoose a date range, select entries, review mappings, then confirm.\nExisting logs are unchecked by default. No background automation.\n\nRequired environment:\n  CLOCKIFY_API_KEY, CLOCKIFY_USER_ID, CLOCKIFY_WORKSPACE_ID\n  ZOHO_CLIENT_ID, ZOHO_CLIENT_SECRET\n\nZoho authorization is guided on first run. --connect reconnects.\nOptional: ZOHO_REFRESH_TOKEN, ZOHO_EMPLOYEE_ID, ZOHO_REGION, ZSYNC_TIMEZONE, ZSYNC_STATE_DIR, ZOHO_DATE_FORMAT\n\n--demo uses fictional data and never contacts either service.`,
 		)
 		return
 	}
@@ -49,12 +49,12 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
 		return
 	}
 	if (argv.some(arg => arg !== "--demo" && arg !== "--connect"))
-		throw new Error("Unknown argument. Run synczc --help.")
+		throw new Error("Unknown argument. Run zsync --help.")
 	if (!process.stdin.isTTY || !process.stdout.isTTY)
 		throw new Error(
-			"synczc needs an interactive terminal. Run synczc --help for setup.",
+			"zsync needs an interactive terminal. Run zsync --help for setup.",
 		)
-	p.intro("synczc · Clockify → Zoho People")
+	p.intro("zsync · Clockify → Zoho People")
 	const demo = argv.includes("--demo")
 		? await import("./demo.ts").then(m => m.demoServices())
 		: undefined

@@ -148,15 +148,15 @@ function formatDate(value: string, format: string): string {
 
 function defaultStateDir(env: Record<string, string | undefined>): string {
   const home = homedir();
-  if (process.platform === "win32") return join(env.APPDATA ?? env.LOCALAPPDATA ?? join(home, "AppData", "Roaming"), "synczc");
-  if (process.platform === "darwin") return join(home, "Library", "Application Support", "synczc");
-  return join(env.XDG_DATA_HOME ?? join(home, ".local", "share"), "synczc");
+  if (process.platform === "win32") return join(env.APPDATA ?? env.LOCALAPPDATA ?? join(home, "AppData", "Roaming"), "zsync");
+  if (process.platform === "darwin") return join(home, "Library", "Application Support", "zsync");
+  return join(env.XDG_DATA_HOME ?? join(home, ".local", "share"), "zsync");
 }
 
 export function loadConfig(env: Record<string, string | undefined> = process.env): Config {
   const region = (env.ZOHO_REGION?.trim() || "").toLowerCase();
   if (region && !ZOHO_REGIONS[region]) throw new Error(`Unsupported ZOHO_REGION ${region}; use a supported Zoho data-center code`);
-  const timezone = validateTimezone(env.SYNCZC_TIMEZONE?.trim() || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC");
+  const timezone = validateTimezone(env.ZSYNC_TIMEZONE?.trim() || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC");
   return {
     clockifyKey: envValue(env, "CLOCKIFY_API_KEY"),
     clockifyWorkspaceId: envValue(env, "CLOCKIFY_WORKSPACE_ID"),
@@ -168,7 +168,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     zohoDateFormat: dateFormat(env.ZOHO_DATE_FORMAT?.trim() || "yyyy-MM-dd"),
     zohoEmployeeId: env.ZOHO_EMPLOYEE_ID?.trim() || "",
     timezone,
-    stateDir: env.SYNCZC_STATE_DIR?.trim() || defaultStateDir(env),
+    stateDir: env.ZSYNC_STATE_DIR?.trim() || defaultStateDir(env),
   };
 }
 

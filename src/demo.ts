@@ -8,7 +8,7 @@ import { entryInput } from './dates.ts';
 import type { Config, Destination, Entry, Job, RemoteLog } from './types.ts';
 
 export async function demoServices() {
-  const stateDir = await mkdtemp(join(tmpdir(), 'synczc-demo-'));
+  const stateDir = await mkdtemp(join(tmpdir(), 'zsync-demo-'));
   const config: Config = { clockifyKey: 'demo', clockifyWorkspaceId: 'demo', clockifyUserId: 'demo',
     zohoClientId: 'demo', zohoClientSecret: 'demo', zohoRefreshToken: 'demo', zohoRegion: 'com',
     zohoEmployeeId: 'demo', timezone: 'UTC', stateDir };

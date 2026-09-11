@@ -1,4 +1,4 @@
-# synczc
+# zsync
 
 An interactive Clockify → Zoho People time-log sync. Choose a period, select
 entries, map projects to jobs, review the changes, and confirm. No scheduler.
@@ -13,8 +13,25 @@ bun run dev
 ```
 
 Develop and test with Bun. The package builds a Node 22+ executable for the planned
-`npx synczc` command; Bun is not required to run the published artifact. The package
+`npx @srafis/zsync` command; Bun is not required to run the published artifact. The package
 has not been published by this implementation.
+
+After publication, run `npx @srafis/zsync`, or install with
+`npm i -g @srafis/zsync` and run `zsync`.
+
+## Publishing
+
+The `publish.yml` GitHub Actions workflow tests and publishes every push to `main`.
+Add a repository Actions secret named `NPM_TOKEN` containing an npm granular
+access token with permission to publish `@srafis/zsync` and bypass 2FA for CI.
+Keep the token in GitHub Secrets, never in this repository.
+
+The release patch is the package.json patch plus the GitHub workflow run number
+(starting at `0.1.1`). The version changes only in CI; no release commits are made.
+Rerunning a published version skips publication. Bump the major/minor in
+package.json when needed. The npm scope must belong to your account or organization.
+
+The CLI uses the `zsync` state directory and `ZSYNC_*` overrides.
 
 ```sh
 bun run typecheck
@@ -67,7 +84,7 @@ the state directory because it now contains authentication and work information.
 
 The range menu contains Today, Yesterday, This week, Last week, and This month.
 Weeks start on Monday. Current periods stop at the time the CLI starts; completed
-periods use local calendar boundaries. Set `SYNCZC_TIMEZONE` to an IANA timezone if
+periods use local calendar boundaries. Set `ZSYNC_TIMEZONE` to an IANA timezone if
 the machine's timezone differs from yours.
 
 Completed entries are assigned to their **local start date**. An entry beginning
@@ -105,7 +122,7 @@ count as synced, even if their titles and durations match.
 
 Only authentication and project/job preferences are stored locally. Existing
 legacy state files supply job preferences only; their ledger, pending writes, and
-lock are ignored. New writes store preferences in `synczc-preferences-*.json`.
+lock are ignored. New writes store preferences in `zsync-preferences-*.json`.
 Legacy marker-only logs are recognized with their original account scope; logs
 containing the exact entry ID work across machines and OAuth clients.
 
@@ -130,9 +147,9 @@ small authorized selection and verify its destination in Zoho People. Live API
 behavior and organization policies must be checked in your own account; automated
 tests use fictional responses and never create actual time logs.
 
-Default state directories are `~/.local/share/synczc` on Linux (or under
-`XDG_DATA_HOME`), `~/Library/Application Support/synczc` on macOS, and
-`%APPDATA%/synczc` on Windows. Changing the OAuth client or employee changes the
+Default state directories are `~/.local/share/zsync` on Linux (or under
+`XDG_DATA_HOME`), `~/Library/Application Support/zsync` on macOS, and
+`%APPDATA%/zsync` on Windows. Changing the OAuth client or employee changes the
 account scope for local preferences. Exact entry IDs in remote metadata still
 identify synced entries across OAuth clients. Supported Zoho region codes are `com`, `eu`, `in`, `au`, `cn`, `jp`,
 `ca`, `sa`, and `uk`; availability and permissions depend on your People account.

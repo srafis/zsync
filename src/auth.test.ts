@@ -6,9 +6,9 @@ import { authPath, callbackCode, connectZoho, employeeRecordId, readAuth, saveAu
 import { loadConfig } from './api.ts';
 
 test('five shell variables suffice; private saved auth completes subsequent runs', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'synczc-auth-test-'));
+  const directory = await mkdtemp(join(tmpdir(), 'zsync-auth-test-'));
   const config = loadConfig({ CLOCKIFY_API_KEY: 'key', CLOCKIFY_USER_ID: 'user', CLOCKIFY_WORKSPACE_ID: 'workspace',
-    ZOHO_CLIENT_ID: 'client', ZOHO_CLIENT_SECRET: 'secret', SYNCZC_STATE_DIR: directory });
+    ZOHO_CLIENT_ID: 'client', ZOHO_CLIENT_SECRET: 'secret', ZSYNC_STATE_DIR: directory });
   try {
     expect(config.zohoRefreshToken).toBe('');
     expect(await readAuth(config)).toBeUndefined();
@@ -17,7 +17,7 @@ test('five shell variables suffice; private saved auth completes subsequent runs
     expect(await connectZoho(config)).toMatchObject({ zohoRegion: 'in', zohoRefreshToken: 'private-token', zohoEmployeeId: '123' });
     expect(await readAuth({ ...config, zohoClientId: 'different' })).toBeUndefined();
     await writeFile(authPath(config), 'corrupt-private-token');
-    await expect(readAuth(config)).rejects.toThrow('Run synczc --connect');
+    await expect(readAuth(config)).rejects.toThrow('Run zsync --connect');
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 test('callback rejects wrong state, foreign redirect, and denied consent', () => {

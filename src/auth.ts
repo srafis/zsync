@@ -24,9 +24,9 @@ export async function readAuth(config: Config): Promise<SavedAuth | undefined> {
   catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return; throw error; }
   let value: SavedAuth;
   try { value = JSON.parse(text); }
-  catch { throw new Error('Saved Zoho authentication is invalid. Run synczc --connect to reconnect.'); }
+  catch { throw new Error('Saved Zoho authentication is invalid. Run zsync --connect to reconnect.'); }
   if (!value || !ZOHO_REGIONS[value.region] || typeof value.refreshToken !== 'string' || !value.refreshToken || typeof value.employeeId !== 'string')
-    throw new Error('Saved Zoho authentication is invalid. Run synczc --connect to reconnect.');
+    throw new Error('Saved Zoho authentication is invalid. Run zsync --connect to reconnect.');
   return value;
 }
 export async function saveAuth(config: Config, value: SavedAuth): Promise<void> {
@@ -82,10 +82,10 @@ export async function listenForCallback(state: string, options: { port?: number;
     }
     try {
       const value = callbackCode(url.href, state);
-      res.end('Authorization received. You can close this tab and return to synczc.');
+      res.end('Authorization received. You can close this tab and return to zsync.');
       finish(undefined, value);
     } catch {
-      res.writeHead(400).end('Authorization was declined. Return to synczc and try again.');
+      res.writeHead(400).end('Authorization was declined. Return to zsync and try again.');
       finish(new Error('Zoho authorization was declined or returned no code.'));
     }
   });
@@ -107,7 +107,7 @@ export async function listenForCallback(state: string, options: { port?: number;
     server.listen(options.port ?? 8765, '127.0.0.1', resolve);
   });
   server.on('error', () => finish(new Error('Zoho callback listener failed. Please retry.')));
-  timer = setTimeout(() => finish(new Error('Zoho sign-in timed out. Run synczc again to retry.')), options.timeoutMs ?? 300_000);
+  timer = setTimeout(() => finish(new Error('Zoho sign-in timed out. Run zsync again to retry.')), options.timeoutMs ?? 300_000);
   options.signal?.addEventListener('abort', cancel, { once: true });
   process.once('SIGINT', cancel);
   process.once('SIGTERM', cancel);
@@ -149,7 +149,7 @@ export async function connectZoho(config: Config, reconnect = false): Promise<Co
     const tokens = await request(`https://${hosts.accounts}/oauth/v2/token`, { method: 'POST', body: new URLSearchParams({
       client_id: config.zohoClientId, client_secret: config.zohoClientSecret, grant_type: 'refresh_token', refresh_token: refreshToken,
     }) });
-    if (typeof tokens.access_token !== 'string') throw new Error('Zoho authorization expired or was revoked. Run synczc --connect.');
+    if (typeof tokens.access_token !== 'string') throw new Error('Zoho authorization expired or was revoked. Run zsync --connect.');
     accessToken = tokens.access_token;
   }
   await saveAuth(config, { region, refreshToken, employeeId });

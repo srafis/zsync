@@ -25,7 +25,7 @@ export type Store = {
   close(): Promise<void>;
 };
 
-const MARKER_RE = /\n\n\[synczc-source:([a-f0-9]{64})\]$/;
+const MARKER_RE = /\n\n\[zsync-source:([a-f0-9]{64})\]$/;
 type StoreContext = { scope: string; closed: boolean };
 
 type PreparedPlan = {
@@ -92,7 +92,7 @@ function withoutMarker(description: string): string {
 }
 
 function markedInput(input: LogInput, marker: string): LogInput {
-  return { ...input, description: `${withoutMarker(input.description)}\n\n[synczc-source:${marker}]` };
+  return { ...input, description: `${withoutMarker(input.description)}\n\n[zsync-source:${marker}]` };
 }
 
 function comparable(input: LogInput | RemoteLog): LogInput {
@@ -169,9 +169,9 @@ function contextFor(store: Store): StoreContext {
 export async function openStore(directory: string, scope: string): Promise<Store> {
   await mkdir(directory, { recursive: true, mode: 0o700 });
   const hash = createHash("sha256").update(scope).digest("hex").slice(0, 32);
-  const path = join(directory, `synczc-preferences-${hash}.json`);
+  const path = join(directory, `zsync-preferences-${hash}.json`);
   let mappings: Record<string, string> = {};
-  for (const candidate of [path, join(directory, `synczc-state-${hash}.json`)]) {
+  for (const candidate of [path, join(directory, `zsync-state-${hash}.json`)]) {
     let text: string;
     try { text = await readFile(candidate, "utf8"); }
     catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") continue; throw error; }

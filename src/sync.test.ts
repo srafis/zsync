@@ -47,7 +47,7 @@ class MockDestination implements Destination {
 }
 
 async function testDirectory(): Promise<string> {
-  return mkdtemp(join(tmpdir(), "synczc-test-"));
+  return mkdtemp(join(tmpdir(), "zsync-test-"));
 }
 
 
@@ -58,6 +58,7 @@ test('Zoho metadata is authoritative across machines and OAuth clients; deleted 
   const entry = { ...input, workItem: 'Meeting', description: JSON.stringify({ source: 'Clockify', entryId: 'entry-1', tags: ['call'] }) };
   try {
     await commit(first, destination, await prepare(first, destination, [{ key: 'entry-1', input: entry }]));
+    expect(destination.logs[0]!.description).toContain('[zsync-source:');
     expect((await prepare(second, destination, [{ key: 'entry-1', input: entry }]))[0]?.status).toBe('skip');
     const changed = { ...entry, workItem: 'Updated meeting' };
     const plan = await prepare(second, destination, [{ key: 'entry-1', input: changed }]);
@@ -105,14 +106,14 @@ test('old ledger and lock are ignored; only job preferences are migrated', async
   const { createHash } = await import('node:crypto');
   const directory = await testDirectory();
   const hash = createHash('sha256').update('scope').digest('hex').slice(0, 32);
-  await writeFile(join(directory, 'synczc.lock'), 'stale');
-  await writeFile(join(directory, `synczc-state-${hash}.json`), JSON.stringify({ scope: 'scope', mappings: { project: 'job' }, ledger: { entry: { remoteId: 'deleted' } }, pending: { entry: {} } }));
+  await writeFile(join(directory, 'zsync.lock'), 'stale');
+  await writeFile(join(directory, `zsync-state-${hash}.json`), JSON.stringify({ scope: 'scope', mappings: { project: 'job' }, ledger: { entry: { remoteId: 'deleted' } }, pending: { entry: {} } }));
   const store = await openStore(directory, 'scope');
   try {
     expect(store.mappings.project).toBe('job');
     expect((await prepare(store, new MockDestination(), [{ key: 'entry', input }]))[0]?.status).toBe('create');
     await store.saveMappings();
-    const saved = JSON.parse(await readFile(join(directory, `synczc-preferences-${hash}.json`), 'utf8'));
+    const saved = JSON.parse(await readFile(join(directory, `zsync-preferences-${hash}.json`), 'utf8'));
     expect(saved).toEqual({ scope: 'scope', mappings: { project: 'job' } });
   } finally { await store.close(); await rm(directory, { recursive: true }); }
 });
