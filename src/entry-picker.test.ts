@@ -1,0 +1,26 @@
+import { expect, test } from 'bun:test';
+import width from 'fast-string-width';
+import { entryTable, fitCell, type PickerRow } from './entry-picker.ts';
+
+const row: PickerRow = {
+  entry: { id: 'one', projectId: 'p', projectName: '映画制作 🎬', tags: ['Meeting', '計画'],
+    description: 'Feature planning 👨‍👩‍👧‍👦 e\u0301 discussion '.repeat(30) + '\n\x1b[31mred',
+    start: '', end: '', billable: false },
+  input: { date: '2026-09-11', minutes: 229, jobId: 'j', employeeId: 'e', description: '', billable: false },
+  status: 'new',
+};
+
+test('table fits terminal cells at narrow and wide widths without a status column', () => {
+  for (const columns of [20, 40, 60, 80, 90, 100, 110, 160, 240]) {
+    const table = entryTable([row, { ...row, status: 'conflict' }], columns);
+    for (const line of [table.header, table.separator, ...table.labels]) {
+      expect(width(line) + 6).toBeLessThan(columns);
+      expect(line).not.toMatch(/[\n\r\x1b]/);
+    }
+    expect(table.labels[0]!.indexOf('│')).toBe(table.labels[1]!.indexOf('│'));
+    expect(table.header).not.toContain('Status');
+    expect(table.labels[1]).not.toContain('conflict');
+  }
+  expect(fitCell('👨‍👩‍👧‍👦abc', 3)).toBe('👨‍👩‍👧‍👦…');
+  expect(width(fitCell('映画', 3))).toBe(3);
+});

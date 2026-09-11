@@ -1,11 +1,35 @@
 {
-	"name": "zoho-clockify-sync",
-	"module": "app.ts",
-	"type": "module",
-	"devDependencies": {
-		"@types/bun": "latest"
-	},
-	"peerDependencies": {
-		"typescript": "^7"
-	}
+  "name": "synczc",
+  "type": "module",
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/node": "^22.20.2",
+    "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "@clack/core": "1.5.0",
+    "@clack/prompts": "^1.8.0",
+    "@js-temporal/polyfill": "^0.5.1",
+    "fast-string-width": "3.0.2"
+  },
+  "version": "0.1.0",
+  "description": "Interactively sync Clockify entries to Zoho People",
+  "bin": {
+    "synczc": "dist/synczc.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    ".env.example"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "bun app.ts",
+    "build": "bun build app.ts --target=node --outfile=dist/synczc.js",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "prepack": "bun run build"
+  }
 }
