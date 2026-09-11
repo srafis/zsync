@@ -58,6 +58,8 @@ function responseMessage(body: unknown): string {
   const response = isRecord(body.response) ? body.response : body;
   const parts: string[] = [];
   if (typeof response.message === "string") parts.push(response.message);
+  if (typeof response.error === "string") parts.push(response.error);
+  if (typeof response.error_description === "string") parts.push(response.error_description);
   if (Array.isArray(response.errors)) {
     for (const error of response.errors) {
       if (!isRecord(error)) continue;
@@ -482,6 +484,7 @@ export function createZoho(config: Config, options: ApiOptions = {}): Destinatio
     );
     const body = requireHttp(result, "Zoho OAuth token refresh", secrets);
     if (!isRecord(body)) throw new Error("Zoho OAuth token refresh returned malformed data");
+    if (typeof body.error === "string") throw new Error(`Zoho OAuth token refresh failed: ${redact(responseMessage(body), secrets)}`);
     const token = valueString(body.access_token, "access_token", "Zoho OAuth token refresh");
     secrets.push(token);
     const expiresIn = Number(body.expires_in ?? 3600);

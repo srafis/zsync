@@ -90,7 +90,7 @@ bun run dev
 1. Choose Today, Yesterday, This week, Last week, or This month.
 2. Use the arrow keys to move through entries and Space to select or deselect them. Press Enter to continue.
 3. Choose a Zoho job for each unmapped Clockify project. zsync remembers your choices. An exact, unique match with a Zoho project or job name is selected automatically.
-4. Review your selection and submit the final Yes/No prompt. Yes is selected initially, but you still have to confirm it.
+4. Review the create/update/delete counts and submit the final Yes/No prompt. It defaults to No when deletions are selected, otherwise Yes.
 
 New, changed and deleted entries start selected. Changed rows show a yellow `[updated]` label before their description and update the existing Zoho log when confirmed. Unchanged synced entries start unselected and are skipped if selected.
 
@@ -115,9 +115,9 @@ zsync creates duration-based logs. The original start and end timestamps are ret
 
 ## Running sync again
 
-zsync writes readable YAML metadata in the Zoho log's Description and recognizes entries by a sync marker derived from their Clockify ID. Existing JSON descriptions are still recognized; selecting one updates it to YAML. Keep that metadata intact so later runs can find the existing log. Recognition works across machines and OAuth clients without a local sync ledger.
+zsync writes readable YAML metadata in the Zoho log's Description and recognizes entries by a sync marker derived from their Clockify ID. Comparison includes the exact metadata text, excluding the sync marker. Differences in the log fields or metadata appear as updates. Keep that metadata intact so later runs can find the existing log. Recognition works across machines and OAuth clients without a local sync ledger.
 
-Selecting a changed entry overwrites differing Zoho fields with the Clockify values. Older marker-only logs are also recognized within their original account scope; selecting them updates their Work Item and metadata to the current format.
+Selecting a changed entry overwrites differing Zoho fields with the Clockify values.
 
 A manually entered Zoho log without sync metadata is not treated as a match, even if its title and duration are identical. Deleting a synced Zoho log makes its Clockify entry appear new again.
 
@@ -129,7 +129,7 @@ Before showing the combined sync table, zsync checks synced Zoho logs dated with
 
 If Clockify confirms an entry is absent, its Zoho log appears in the same checkbox table as new and changed entries, labelled with a red `[deleted]` before its description. Deletion rows start checked. Deselect any logs you want to keep and review the create/update/delete counts at the final confirmation. The app rechecks each selected log and its Clockify source before deleting, then verifies that the Zoho log is gone. Deletions are not retried automatically after an uncertain response.
 
-Logs need Clockify source metadata, an entry ID and a valid sync marker. Explicit workspace/user IDs must match your configuration. Older JSON and YAML logs without workspace/user IDs are checked against the currently configured Clockify workspace, so use the workspace you originally synced them from. Manual logs and locked logs are excluded.
+Logs need Clockify source metadata, an entry ID and a valid sync marker. Explicit workspace/user IDs must match your configuration. Deletion checks use the configured Clockify workspace. Use the same workspace for tracking and syncing. Manual logs and locked logs are excluded.
 
 Deletion review also runs when the selected period has no completed Clockify entries. After confirmation, the app applies creations and updates, then deletions. A failure does not roll back successful operations. A deletion failure is reported per entry and produces a nonzero exit status.
 

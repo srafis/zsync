@@ -214,3 +214,19 @@ test('Clockify mismatch falls back to all pages, including moved and running ent
   await expect(client.entryExists('deleted')).rejects.toThrow();
   await expect(createClockify(config, { fetch: async () => json({ message: 'Invalid request' }, 400) }).entryExists('entry')).rejects.toThrow();
 });
+
+test('OAuth failures report error details without exposing credentials', async () => {
+  for (const status of [200, 400]) {
+    const client = createZoho(config, { fetch: async () => json({ error: 'invalid_grant', error_description: `Rejected ${config.zohoRefreshToken} for ${config.zohoClientSecret}` }, status) });
+    try {
+      await client.listJobs();
+      throw new Error('Expected OAuth failure');
+    } catch (error) {
+      const message = String(error);
+      expect(message).toContain('invalid_grant');
+      expect(message).toContain('Rejected [redacted] for [redacted]');
+      expect(message).not.toContain(config.zohoRefreshToken);
+      expect(message).not.toContain(config.zohoClientSecret);
+    }
+  }
+});
