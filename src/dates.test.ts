@@ -34,7 +34,17 @@ test('entry title becomes work item and description contains deterministic sourc
     description: 'Weekly meeting', start: '2026-09-11T10:00:00Z', end: '2026-09-11T11:00:46Z', billable: true };
   const value = entryInput(entry, 'job', 'employee', 'UTC');
   expect(value.workItem).toBe(entry.description);
-  expect(JSON.parse(value.description)).toEqual({ source: 'Clockify', entryId: entry.id,
-    project: { id: entry.projectId, name: entry.projectName }, tags: entry.tags, start: entry.start, end: entry.end, billable: true });
+  expect(value.description).toBe(`source: Clockify
+entryId: "source-id"
+project:
+  id: "project-id"
+  name: "Project"
+tags: ["call/meet"]
+start: "2026-09-11T10:00:00Z"
+end: "2026-09-11T11:00:46Z"
+billable: true`);
+  const unusual = entryInput({ ...entry, projectName: 'Name: \"quoted\"\nnext', tags: ['a\nb', '#tag'] }, 'job', 'employee', 'UTC');
+  expect(unusual.description.split('\n')).toHaveLength(9);
+  expect(unusual.description).toContain(`  name: ${JSON.stringify('Name: \"quoted\"\nnext')}`);
   expect(entryInput(entry, 'job', 'employee', 'UTC')).toEqual(value);
 });

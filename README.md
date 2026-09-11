@@ -98,14 +98,14 @@ Choosing No or cancelling before the sync makes no time-log changes in Zoho. Job
 
 ## What gets copied
 
-| Clockify field                                         | Zoho field or behavior                             |
-| ------------------------------------------------------ | -------------------------------------------------- |
-| Description                                            | Work Item                                          |
-| Project                                                | The Zoho job you selected or matched               |
-| Duration                                               | Hours, rounded to the nearest minute               |
-| Start date                                             | Work date in your configured timezone              |
-| Billable flag                                          | Billing status                                     |
-| Entry ID, project, tags, start/end times, billing flag | Source metadata in Description, with a sync marker |
+| Clockify field                                         | Zoho field or behavior                                    |
+| ------------------------------------------------------ | --------------------------------------------------------- |
+| Description                                            | Work Item                                                 |
+| Project                                                | The Zoho job you selected or matched                      |
+| Duration                                               | Hours, rounded to the nearest minute                      |
+| Start date                                             | Work date in your configured timezone                     |
+| Billable flag                                          | Billing status                                            |
+| Entry ID, project, tags, start/end times, billing flag | Readable YAML metadata in Description, with a sync marker |
 
 Only completed entries are included. Weeks start on Monday, and current periods end at the time you start the CLI.
 
@@ -115,7 +115,7 @@ zsync creates duration-based logs. The original start and end timestamps are ret
 
 ## Running sync again
 
-zsync recognizes entries by their Clockify ID in the Zoho log's Description. Keep that metadata intact so later runs can find the existing log. Recognition works across machines and OAuth clients without a local sync ledger.
+zsync writes readable YAML metadata in the Zoho log's Description and recognizes entries by a sync marker derived from their Clockify ID. Existing JSON descriptions are still recognized; selecting one updates it to YAML. Keep that metadata intact so later runs can find the existing log. Recognition works across machines and OAuth clients without a local sync ledger.
 
 Selecting a changed entry overwrites differing Zoho fields with the Clockify values. Older marker-only logs are also recognized within their original account scope; selecting them updates their Work Item and metadata to the current format.
 

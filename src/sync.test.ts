@@ -1,3 +1,4 @@
+import { entryInput } from "./dates";
 import { test, expect } from "bun:test";
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -60,11 +61,13 @@ test('Zoho metadata is authoritative across machines and OAuth clients; deleted 
     await commit(first, destination, await prepare(first, destination, [{ key: 'entry-1', input: entry }]));
     expect(destination.logs[0]!.description).toContain('[zsync-source:');
     expect((await prepare(second, destination, [{ key: 'entry-1', input: entry }]))[0]?.status).toBe('skip');
-    const changed = { ...entry, workItem: 'Updated meeting' };
+    const changed = entryInput({ id: 'entry-1', projectId: null, projectName: '', tags: ['call'], description: 'Updated meeting', start: '2026-09-11T10:00:00Z', end: '2026-09-11T11:00:00Z', billable: true }, 'job-1', 'employee-1', 'UTC');
     const plan = await prepare(second, destination, [{ key: 'entry-1', input: changed }]);
     expect(plan[0]?.status).toBe('update');
     expect((await commit(second, destination, plan))[0]?.status).toBe('updated');
     expect(destination.creates).toBe(1);
+    expect(destination.logs[0]!.description).toStartWith('source: Clockify\n');
+    expect((await prepare(first, destination, [{ key: 'entry-1', input: changed }]))[0]?.status).toBe('skip');
     destination.logs = [];
     expect((await prepare(first, destination, [{ key: 'entry-1', input: entry }]))[0]?.status).toBe('create');
     expect(await readdir(a)).toEqual([]);

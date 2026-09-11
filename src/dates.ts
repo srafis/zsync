@@ -45,9 +45,17 @@ export function entryInput(entry: Entry, jobId: string, employeeId: string, zone
   if (minutes < 1) throw new Error(`Entry ${entry.id} rounds to zero minutes. Adjust it in Clockify before syncing.`);
   return { jobId, employeeId, date: start.toZonedDateTimeISO(zone).toPlainDate().toString(), minutes,
     workItem: entry.description,
-    description: JSON.stringify({ source: 'Clockify', entryId: entry.id,
-      project: { id: entry.projectId, name: entry.projectName }, tags: entry.tags,
-      start: entry.start, end: entry.end, billable: entry.billable }, null, 2),
+    description: [
+      'source: Clockify',
+      `entryId: ${JSON.stringify(entry.id)}`,
+      'project:',
+      `  id: ${JSON.stringify(entry.projectId)}`,
+      `  name: ${JSON.stringify(entry.projectName)}`,
+      `tags: ${JSON.stringify(entry.tags)}`,
+      `start: ${JSON.stringify(entry.start)}`,
+      `end: ${JSON.stringify(entry.end)}`,
+      `billable: ${entry.billable}`,
+    ].join('\n'),
     billable: entry.billable };
 }
 
