@@ -5,7 +5,7 @@ import { styleText } from 'node:util';
 import { cleanText, hhmm } from './dates.ts';
 import type { Entry, LogInput } from './types.ts';
 
-export type PickerRow = { entry: Entry; input: LogInput; status: 'new' | 'synced' | 'changed' | 'conflict'; reason?: string };
+export type PickerRow = { entry: Entry; input: LogInput; status: 'new' | 'synced' | 'changed' | 'conflict' | 'deleted'; reason?: string };
 const segments = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
 
 export function fitCell(text: string, size: number): string {
@@ -29,7 +29,7 @@ export function entryTable(rows: PickerRow[], columns: number) {
   if (columns >= 90) fields.push({ title: 'Date', size: 10, value: row => row.input.date });
   if (columns >= 110) fields.push({ title: 'Tags', size: 14, value: row => row.entry.tags.join('/') || '—' });
   const used = fields.reduce((sum, field) => sum + field.size + 3, 0);
-  fields.push({ title: 'Description', size: Math.max(1, available - used), value: row => `${row.status === 'changed' ? '[changed] ' : ''}${row.entry.description || '—'}` });
+  fields.push({ title: 'Description', size: Math.max(1, available - used), value: row => `${row.status === 'changed' || row.status === 'deleted' ? `[${row.status === 'changed' ? 'updated' : 'deleted'}] ` : ''}${row.entry.description || '—'}` });
   const line = (cells: string[]) => fitCell(cells.join(' │ '), available).trimEnd();
   return {
     header: line(fields.map(field => fitCell(field.title, field.size))),
@@ -38,10 +38,18 @@ export function entryTable(rows: PickerRow[], columns: number) {
   };
 }
 
+export function colorEntryLabel(label: string, dim = false): string {
+  return label.split(/(\[updated\]|\[deleted\])/).map(part =>
+    part === '[updated]' ? styleText(['bold', 'yellow'], part) :
+    part === '[deleted]' ? styleText(['bold', 'red'], part) :
+    dim ? styleText('dim', part) : part,
+  ).join('');
+}
+
 export function pickEntries(rows: PickerRow[]): Promise<string[] | symbol> {
   return new MultiSelectPrompt({
     options: rows.map(row => ({ value: row.entry.id })),
-    initialValues: rows.filter(row => row.status === 'new' || row.status === 'changed').map(row => row.entry.id),
+    initialValues: rows.filter(row => row.status === 'new' || row.status === 'changed' || row.status === 'deleted').map(row => row.entry.id),
     required: false,
     render() {
       const columns = process.stdout.columns || 80;
@@ -60,7 +68,7 @@ export function pickEntries(rows: PickerRow[]): Promise<string[] | symbol> {
         return [gap, heading('Selected entries'), gap,
           mutedLine(`│     ${table.header}`),
           mutedLine(`│     ${table.separator}`),
-          ...table.labels.map(label => `${gap}   ${styleText('green', '◼')} ${styleText('dim', label)}`),
+          ...table.labels.map(label => `${gap}   ${styleText('green', '◼')} ${colorEntryLabel(label, true)}`),
         ].join('\n');
       }
       if (this.state === 'cancel') return `${gap}\n${heading('Selection cancelled')}`;
@@ -73,7 +81,7 @@ export function pickEntries(rows: PickerRow[]): Promise<string[] | symbol> {
         const checked = selected.has(row.entry.id);
         const check = styleText(checked ? 'green' : focused ? 'cyan' : 'dim', checked ? '◼' : '◻');
         const label = table.labels[index + start]!;
-        return `${gap} ${focused ? styleText('cyan', '›') : ' '} ${check} ${focused ? label : styleText('dim', label)}`;
+        return `${gap} ${focused ? styleText('cyan', '›') : ' '} ${check} ${colorEntryLabel(label, !focused)}`;
       });
       const focused = rows[this.cursor];
       return [gap, heading('Which entries do you want to sync?'), gap,

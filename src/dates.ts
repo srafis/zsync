@@ -34,7 +34,7 @@ export function dateRange(name: RangeName, zone: string, now = Temporal.Now.inst
 
 // Entries belong to their local start date, even when they end the next day.
 // This keeps one stable source ID per log across overlapping date selections.
-export function entryInput(entry: Entry, jobId: string, employeeId: string, zone: string): LogInput {
+export function entryInput(entry: Entry, jobId: string, employeeId: string, zone: string, source?: { workspaceId: string; userId: string }): LogInput {
   const start = Temporal.Instant.from(entry.start);
   const end = Temporal.Instant.from(entry.end);
   const seconds = Number(end.epochNanoseconds - start.epochNanoseconds) / 1e9;
@@ -47,6 +47,7 @@ export function entryInput(entry: Entry, jobId: string, employeeId: string, zone
     workItem: entry.description,
     description: [
       'source: Clockify',
+      ...(source ? [`workspaceId: ${JSON.stringify(source.workspaceId)}`, `userId: ${JSON.stringify(source.userId)}`] : []),
       `entryId: ${JSON.stringify(entry.id)}`,
       'project:',
       `  id: ${JSON.stringify(entry.projectId)}`,

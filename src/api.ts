@@ -285,7 +285,34 @@ export function createClockify(config: Config, options: ApiOptions = {}) {
     return entries;
   }
 
-  return { validate, listEntries };
+  async function entryExists(id: string): Promise<boolean | null> {
+    if (!id) throw new Error("Clockify entry ID is required");
+    const path = `/workspaces/${encodeURIComponent(config.clockifyWorkspaceId)}/time-entries/${encodeURIComponent(id)}`;
+    const result = await fetchRaw(fetcher, `${CLOCKIFY_API}${path}`, { headers: { "X-Api-Key": config.clockifyKey } }, "Clockify entry lookup", [config.clockifyKey], options.timeoutMs ?? REQUEST_TIMEOUT_MS, false);
+    // A workspace mismatch alone is ambiguous. Confirm absence against the
+    // complete user list, without date or running-timer filters.
+    if (result.status === 400 && isRecord(result.body) &&
+        result.body.message === "Time entry doesn't belong to Workspace") {
+      await validate();
+      const entries = await clockifyPages(fetcher, config,
+        `/workspaces/${encodeURIComponent(config.clockifyWorkspaceId)}/user/${encodeURIComponent(config.clockifyUserId)}/time-entries`, {}, options);
+      const ids = entries.map(entry => {
+        if (entry.userId !== undefined && String(entry.userId) !== config.clockifyUserId)
+          throw new Error("Clockify returned an entry for a different user");
+        return valueId(entry.id, "id", "Clockify entry");
+      });
+      return ids.includes(id);
+    }
+    if (result.status === 404) {
+      await validate();
+      return false;
+    }
+    const body = requireHttp(result, "Clockify entry lookup", [config.clockifyKey]);
+    if (!isRecord(body) || body.id !== id) throw new Error("Clockify entry lookup returned an unexpected entry");
+    return true;
+  }
+
+  return { validate, listEntries, entryExists };
 }
 
 function validDate(value: string, name: string): string {
@@ -426,7 +453,7 @@ function logFields(input: LogInput, config: Config): Record<string, string> {
   };
 }
 
-export function createZoho(config: Config, options: ApiOptions = {}): Destination & { validate(): Promise<void>; listJobs(): Promise<Job[]> } {
+export function createZoho(config: Config, options: ApiOptions = {}): Destination & { validate(): Promise<void>; listJobs(): Promise<Job[]>; deleteLog(id: string): Promise<void> } {
   const region = ZOHO_REGIONS[config.zohoRegion.toLowerCase()];
   if (!region) throw new Error(`Unsupported Zoho region ${config.zohoRegion}`);
   const { accounts, people } = region;
@@ -593,5 +620,13 @@ export function createZoho(config: Config, options: ApiOptions = {}): Destinatio
     await rateLimit(writesRate, ZOHO_WRITE_INTERVAL_MS, sleep, () => writeLog("/timetracker/edittimelog", { timeLogId: id, ...logFields(input, config) }, id));
   }
 
-  return { validate: async () => { await listJobs(); }, listJobs, listLogs, getLog, createLog, updateLog };
+  async function deleteLog(id: string): Promise<void> {
+    if (!id) throw new Error("Zoho timelog id is required");
+    await rateLimit(writesRate, ZOHO_WRITE_INTERVAL_MS, sleep, async () => {
+      const body = await zohoRequest(queryUrl("", "/timetracker/deletetimelog", { timeLogId: id }), {}, true);
+      zohoStatus(body, "Zoho deletetimelog", secrets, true);
+    });
+  }
+
+  return { validate: async () => { await listJobs(); }, listJobs, listLogs, getLog, createLog, updateLog, deleteLog };
 }

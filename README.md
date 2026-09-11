@@ -4,7 +4,7 @@ Keep tracking time in Clockify and sync your entries to Zoho People when you're 
 
 zsync is a terminal app for people who want to keep using their personal Clockify workspace while maintaining their work timesheet in Zoho. It offers another way to log time alongside the Zoho Chrome extension: use the Clockify interface you already know, then choose which completed entries to copy across.
 
-Each run lets you select a period, pick entries, map Clockify projects to Zoho jobs, and confirm the sync. Nothing runs in the background.
+Each run lets you select a period, pick new, changed or deleted entries, map Clockify projects to Zoho jobs, and confirm the sync. Nothing runs in the background.
 
 ## Get started
 
@@ -92,9 +92,9 @@ bun run dev
 3. Choose a Zoho job for each unmapped Clockify project. zsync remembers your choices. An exact, unique match with a Zoho project or job name is selected automatically.
 4. Review your selection and submit the final Yes/No prompt. Yes is selected initially, but you still have to confirm it.
 
-New and changed entries start selected. Changed rows show `[changed]` before their description and update the existing Zoho log when confirmed. Unchanged synced entries start unselected and are skipped if selected.
+New, changed and deleted entries start selected. Changed rows show a yellow `[updated]` label before their description and update the existing Zoho log when confirmed. Unchanged synced entries start unselected and are skipped if selected.
 
-Choosing No or cancelling before the sync makes no time-log changes in Zoho. Job mappings may already have been saved locally.
+The final confirmation lists how many Zoho logs will be created, updated and deleted. It defaults to No if any deletions are selected. Cancelling before confirmation makes no Zoho changes. Job mappings may already have been saved locally.
 
 ## What gets copied
 
@@ -123,9 +123,19 @@ A manually entered Zoho log without sync metadata is not treated as a match, eve
 
 Before writing, zsync checks for changes in both services. It verifies each write afterward and attempts to reconcile an uncertain response without blindly repeating the write. If an entry remains `uncertain`, inspect it in Zoho before retrying. Failures are reported per entry, and failed or uncertain results produce a nonzero exit status. A run can partially succeed.
 
+## Review deleted entries
+
+Before showing the combined sync table, zsync checks synced Zoho logs dated within your selected period. For each eligible log, it looks up the Clockify entry by ID, regardless of date. A moved entry or running timer that still exists is not offered for deletion. For a Clockify workspace-mismatch response, zsync checks the complete paginated user entry list without date filters. Only confirmed absence becomes a deletion candidate. Authentication errors and other failed lookups stop discovery rather than counting as deletions.
+
+If Clockify confirms an entry is absent, its Zoho log appears in the same checkbox table as new and changed entries, labelled with a red `[deleted]` before its description. Deletion rows start checked. Deselect any logs you want to keep and review the create/update/delete counts at the final confirmation. The app rechecks each selected log and its Clockify source before deleting, then verifies that the Zoho log is gone. Deletions are not retried automatically after an uncertain response.
+
+Logs need Clockify source metadata, an entry ID and a valid sync marker. Explicit workspace/user IDs must match your configuration. Older JSON and YAML logs without workspace/user IDs are checked against the currently configured Clockify workspace, so use the workspace you originally synced them from. Manual logs and locked logs are excluded.
+
+Deletion review also runs when the selected period has no completed Clockify entries. After confirmation, the app applies creations and updates, then deletions. A failure does not roll back successful operations. A deletion failure is reported per entry and produces a nonzero exit status.
+
 ## Limits to know
 
-- Sync runs one way, from Clockify to Zoho. It does not copy Zoho edits back, delete Zoho logs, or submit or approve timesheets.
+- Sync runs one way, from Clockify to Zoho. It does not copy Zoho edits back or submit or approve timesheets.
 - Locked or approved logs and multiple Zoho logs identifying the same Clockify entry are conflicts. Resolve them or deselect those entries before continuing.
 - Lookup covers the selected entries' date span. If you move a previously synced entry to a date outside that span, reconcile its old Zoho log before syncing again.
 - Run one sync at a time. There is no protection against simultaneous runs across terminals or machines.

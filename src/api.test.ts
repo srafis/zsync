@@ -166,3 +166,51 @@ test('Zoho writes workItem separately and reads it from taskName', async () => {
   await zoho.updateLog('log', input);
   expect(await zoho.getLog('log')).toMatchObject({ workItem: title, description: metadata });
 });
+
+test('Clockify absence requires 404 and valid account access; other failures never mean deleted', async () => {
+  for (const status of [403, 429, 500]) {
+    const client = createClockify(config, { fetch: async () => json({}, status) });
+    await expect(client.entryExists('entry')).rejects.toThrow();
+  }
+  const client = createClockify(config, { fetch: async url => {
+    const path = new URL(String(url)).pathname;
+    if (path.endsWith('/time-entries/entry')) return json({}, 404);
+    return json({ id: path.endsWith('/user') ? 'user' : 'workspace' });
+  } });
+  expect(await client.entryExists('entry')).toBe(false);
+  expect(await createClockify(config, { fetch: async () => json({ id: 'entry' }) }).entryExists('entry')).toBe(true);
+  await expect(createClockify(config, { fetch: async () => json({}, 404) }).entryExists('entry')).rejects.toThrow();
+});
+
+test('Zoho deletion uses timeLogId and accepts a success response without result', async () => {
+  const client = createZoho(config, { fetch: async (url, init) => {
+    const parsed = new URL(String(url));
+    if (parsed.pathname.endsWith('/token')) return json({ access_token: 'token', expires_in: 3600 });
+    expect(parsed.pathname).toEndWith('/timetracker/deletetimelog');
+    expect(parsed.searchParams.get('timeLogId')).toBe('log');
+    return json({ response: { status: 0, message: 'Timelog(s) deleted successfully' } });
+  } });
+  await client.deleteLog('log');
+});
+
+test('Clockify mismatch falls back to all pages, including moved and running entries', async () => {
+  let failList = false;
+  const client = createClockify(config, { fetch: async url => {
+    const parsed = new URL(String(url));
+    if (parsed.pathname.endsWith('/time-entries')) {
+      expect(parsed.searchParams.has('start')).toBe(false);
+      expect(parsed.searchParams.has('end')).toBe(false);
+      if (failList) return json({}, 403);
+      return parsed.searchParams.get('page') === '1'
+        ? json(Array.from({ length: 200 }, (_, i) => ({ id: `old-${i}`, userId: 'user' })))
+        : json([{ id: 'entry', userId: 'user', timeInterval: { end: null } }]);
+    }
+    if (parsed.pathname.includes('/time-entries/')) return json({ message: "Time entry doesn't belong to Workspace" }, 400);
+    return json({ id: parsed.pathname.endsWith('/user') ? 'user' : 'workspace' });
+  } });
+  expect(await client.entryExists('entry')).toBe(true);
+  expect(await client.entryExists('deleted')).toBe(false);
+  failList = true;
+  await expect(client.entryExists('deleted')).rejects.toThrow();
+  await expect(createClockify(config, { fetch: async () => json({ message: 'Invalid request' }, 400) }).entryExists('entry')).rejects.toThrow();
+});

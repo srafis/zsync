@@ -17,7 +17,8 @@ export async function demoServices() {
     tags: ['Meeting'], description: 'Feature planning discussion', start: end.toZonedDateTimeISO('UTC').startOfDay().toInstant().toString(), end: end.toZonedDateTimeISO('UTC').startOfDay().add({ hours: 1 }).toInstant().toString(), billable: true }];
   entries.push({ ...entries[0]!, id: 'demo-entry-2', description: 'Already synced example', tags: [] });
   const logs = new Map<string, RemoteLog>();
-  const zoho: Destination & { validate(): Promise<void>; listJobs(): Promise<Job[]> } = {
+  const zoho: Destination & { validate(): Promise<void>; listJobs(): Promise<Job[]>; deleteLog(id: string): Promise<void> } = {
+    async deleteLog(id) { logs.delete(id); },
     async validate() {}, async listJobs() { return [{ id: 'demo-job', name: 'Example project' }]; },
     async listLogs() { return [...logs.values()].map(log => ({ ...log })); },
     async getLog(id) { const log = logs.get(id); return log ? { ...log } : null; },
@@ -26,8 +27,10 @@ export async function demoServices() {
   };
   const store = await openStore(stateDir, accountScope(config));
   try {
-    await commit(store, zoho, await prepare(store, zoho, [{ key: entries[1]!.id, input: entryInput(entries[1]!, 'demo-job', 'demo', 'UTC') }]));
+    await commit(store, zoho, await prepare(store, zoho, [{ key: entries[1]!.id, input: entryInput(entries[1]!, 'demo-job', 'demo', 'UTC', { workspaceId: 'demo', userId: 'demo' }) }]));
+    const deleted = { ...entries[0]!, id: 'demo-deleted', description: 'Deleted Clockify example' };
+    await commit(store, zoho, await prepare(store, zoho, [{ key: deleted.id, input: entryInput(deleted, 'demo-job', 'demo', 'UTC', { workspaceId: 'demo', userId: 'demo' }) }]));
   } finally { await store.close(); }
-  return { config, zoho, clockify: { async validate() {}, async listEntries() { return entries.map(entry => ({ ...entry })); } },
+  return { config, zoho, clockify: { async entryExists(id: string) { return entries.some(entry => entry.id === id); }, async validate() {}, async listEntries() { return entries.map(entry => ({ ...entry })); } },
     cleanup: () => rm(stateDir, { recursive: true, force: true }) };
 }
