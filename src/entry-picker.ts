@@ -1,4 +1,5 @@
 import { MultiSelectPrompt } from '@clack/core';
+import { symbol } from '@clack/prompts';
 import width from 'fast-string-width';
 import { styleText } from 'node:util';
 import { cleanText, hhmm } from './dates.ts';
@@ -44,35 +45,43 @@ export function pickEntries(rows: PickerRow[]): Promise<string[] | symbol> {
     required: false,
     render() {
       const columns = process.stdout.columns || 80;
-      const line = (text: string) => fitCell(text, Math.max(1, columns - 1)).trimEnd();
+      const line = (text: string) => fitCell(text, Math.max(1, columns - 1)).trimEnd()
+        .replace(/^[│└]/, guide => styleText('gray', guide));
+      const mutedLine = (text: string) => {
+        const clipped = fitCell(text, Math.max(1, columns - 1)).trimEnd();
+        return styleText("gray", clipped.slice(0, 1)) + styleText("dim", clipped.slice(1));
+      };
+      const gap = styleText('gray', '│');
+      const heading = (text: string) => `${symbol(this.state)}  ${fitCell(text, Math.max(0, columns - 4)).trimEnd()}`;
       if (this.state === 'submit') {
         const selected = rows.filter(row => this.value?.includes(row.entry.id));
-        if (!selected.length) return '│';
+        if (!selected.length) return gap;
         const table = entryTable(selected, columns);
-        return ['│', line('◇  Selected entries'), '│',
-          styleText('dim', line(`│     ${table.header}`)),
-          styleText('dim', line(`│     ${table.separator}`)),
-          ...table.labels.map(label => line(`│   ◼ ${label}`)),
+        return [gap, heading('Selected entries'), gap,
+          mutedLine(`│     ${table.header}`),
+          mutedLine(`│     ${table.separator}`),
+          ...table.labels.map(label => `${gap}   ${styleText('green', '◼')} ${styleText('dim', label)}`),
         ].join('\n');
       }
-      if (this.state === 'cancel') return `│\n${line('■  Selection cancelled')}`;
+      if (this.state === 'cancel') return `${gap}\n${heading('Selection cancelled')}`;
       const table = entryTable(rows, columns);
       const count = Math.max(1, (process.stdout.rows || 24) - 13);
       const start = Math.max(0, Math.min(this.cursor - Math.floor(count / 2), rows.length - count));
       const selected = new Set(this.value ?? []);
       const visible = rows.slice(start, start + count).map((row, index) => {
         const focused = index + start === this.cursor;
-        const check = selected.has(row.entry.id) ? '◼' : '◻';
-        const text = `│ ${focused ? '›' : ' '} ${check} ${table.labels[index + start]}`;
-        return focused ? styleText('cyan', line(text)) : line(text);
+        const checked = selected.has(row.entry.id);
+        const check = styleText(checked ? 'green' : focused ? 'cyan' : 'dim', checked ? '◼' : '◻');
+        const label = table.labels[index + start]!;
+        return `${gap} ${focused ? styleText('cyan', '›') : ' '} ${check} ${focused ? label : styleText('dim', label)}`;
       });
       const focused = rows[this.cursor];
-      return ['│', line('◆  Which entries do you want to sync?'), '│',
-        styleText('dim', line(`│     ${table.header}`)),
-        styleText('dim', line(`│     ${table.separator}`)), ...visible,
-        '│', line(`│  ${selected.size}/${rows.length} selected · ${start + 1}–${Math.min(start + count, rows.length)} shown`),
+      return [gap, heading('Which entries do you want to sync?'), gap,
+        mutedLine(`│     ${table.header}`),
+        mutedLine(`│     ${table.separator}`), ...visible,
+        gap, line(`│  ${selected.size}/${rows.length} selected · ${start + 1}–${Math.min(start + count, rows.length)} shown`),
         ...(focused?.reason ? [line(`│  ${focused.reason}`)] : []),
-        styleText('dim', line('└  ↑↓ move · Space toggle · Enter confirm · Esc cancel')),
+        mutedLine('└  ↑↓ move · Space toggle · Enter confirm · Esc cancel'),
       ].join('\n');
     },
   }).prompt().then(value => value ?? []);
