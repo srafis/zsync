@@ -28,3 +28,13 @@ test('midnight, month rollover, and fall daylight-saving boundary', () => {
   const fall = dateRange('yesterday', 'America/New_York', '2026-11-02T12:00:00Z');
   expect((Date.parse(fall.end) - Date.parse(fall.start)) / 3600000).toBe(25);
 });
+
+test('entry title becomes work item and description contains deterministic source metadata', () => {
+  const entry: Entry = { id: 'source-id', projectId: 'project-id', projectName: 'Project', tags: ['call/meet'],
+    description: 'Weekly meeting', start: '2026-09-11T10:00:00Z', end: '2026-09-11T11:00:46Z', billable: true };
+  const value = entryInput(entry, 'job', 'employee', 'UTC');
+  expect(value.workItem).toBe(entry.description);
+  expect(JSON.parse(value.description)).toEqual({ source: 'Clockify', entryId: entry.id,
+    project: { id: entry.projectId, name: entry.projectName }, tags: entry.tags, start: entry.start, end: entry.end, billable: true });
+  expect(entryInput(entry, 'job', 'employee', 'UTC')).toEqual(value);
+});

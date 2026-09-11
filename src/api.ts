@@ -385,6 +385,8 @@ function remoteLog(raw: RecordValue, config: Config, context: string): RemoteLog
   const minutes = Number.isFinite(totalSeconds) && totalSeconds > 0 ? Math.round(totalSeconds / 60) : minutesFromHours(raw.hours, context);
   if (minutes < 0 || minutes > MAX_MINUTES) throw new Error(`${context}: duration is outside 0-24 hours`);
   const description = raw.description === undefined || raw.description === null ? "" : typeof raw.description === "string" ? raw.description : valueString(raw.description, "description", context);
+  const workItem = raw.taskName ?? "";
+  if (typeof workItem !== "string") throw new Error(`${context}: taskName is malformed`);
   const approvalStatus = typeof raw.approvalStatus === "string" ? raw.approvalStatus.toLowerCase() : raw.approvalStatus;
   const editAllowed = typeof raw.isEditAllowed === "string" ? raw.isEditAllowed.toLowerCase() : raw.isEditAllowed;
   const locked = raw.locked === true || raw.locked === "true" || approvalStatus === "approved" ||
@@ -395,6 +397,7 @@ function remoteLog(raw: RecordValue, config: Config, context: string): RemoteLog
     employeeId,
     date: parseZohoDate(raw.workDate, config.zohoDateFormat ?? "yyyy-MM-dd", context, raw.db_workDate),
     minutes,
+    workItem,
     description,
     billable,
     ...(locked === undefined ? {} : { locked }),
@@ -408,6 +411,7 @@ function logFields(input: LogInput, config: Config): Record<string, string> {
     throw new Error("Zoho log requires a job and 1-1440 whole minutes");
   }
   if (typeof input.description !== "string" || input.description.length > 15_000) throw new Error("Zoho log description is malformed or too long");
+  if (input.workItem !== undefined && typeof input.workItem !== "string") throw new Error("Zoho workItem is malformed");
   if (typeof input.billable !== "boolean") throw new Error("Zoho log billable is malformed");
   const format = dateFormat(config.zohoDateFormat ?? "yyyy-MM-dd");
   return {
@@ -417,6 +421,7 @@ function logFields(input: LogInput, config: Config): Record<string, string> {
     dateFormat: format,
     hours: `${String(Math.floor(input.minutes / 60)).padStart(2, "0")}:${String(input.minutes % 60).padStart(2, "0")}`,
     billingStatus: input.billable ? "billable" : "non-billable",
+    workItem: input.workItem ?? "",
     description: input.description,
   };
 }

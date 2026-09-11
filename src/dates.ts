@@ -44,7 +44,11 @@ export function entryInput(entry: Entry, jobId: string, employeeId: string, zone
   const minutes = Math.round(seconds / 60);
   if (minutes < 1) throw new Error(`Entry ${entry.id} rounds to zero minutes. Adjust it in Clockify before syncing.`);
   return { jobId, employeeId, date: start.toZonedDateTimeISO(zone).toPlainDate().toString(), minutes,
-    description: entry.description, billable: entry.billable };
+    workItem: entry.description,
+    description: JSON.stringify({ source: 'Clockify', entryId: entry.id,
+      project: { id: entry.projectId, name: entry.projectName }, tags: entry.tags,
+      start: entry.start, end: entry.end, billable: entry.billable }, null, 2),
+    billable: entry.billable };
 }
 
 export function inRange(entry: Entry, range: Range): boolean {

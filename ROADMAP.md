@@ -82,28 +82,22 @@ identifies entries previously synced, changed, or needing attention.
       destination is unambiguous; otherwise ask the user to select a job.
 - [x] Handle entries without a Clockify project by asking for a destination job.
       Do not create Zoho projects or jobs implicitly.
-- [x] Persist mappings and a sync ledger in the user's application-data directory,
-      scoped to the Clockify workspace/user and Zoho region/OAuth client/employee.
-- [x] Key ledger entries by Clockify entry ID. Store the Zoho log ID and last
-      verified content snapshot. Keep project-to-job mappings separately.
-- [x] Persist state atomically and prevent concurrent local sync processes from
-      writing the same entries. Never silently reset a corrupt ledger.
-- [x] Investigate a destination-side source-ID marker or idempotency mechanism.
-      A local ledger alone cannot prevent duplicates after a write succeeds but
-      the response or local save is lost.
-- [x] Record pending writes before sending them. After a timeout or crash, locate
-      and verify the destination log before another create. If the outcome cannot
-      be resolved safely, require reconciliation instead of blindly retrying.
-- [x] Label existing matches as synced and leave them unchecked. If selected,
-      skip unchanged logs and update changed logs using their existing Zoho IDs.
-- [x] Detect destination edits, missing logs, duplicate markers, and locked or
-      approved records. Flag conflicts instead of overwriting or recreating silently.
-- [x] Explain the boundary for pre-existing manually entered Zoho logs: never
-      assume matching descriptions and durations prove identity. Require explicit
-      reconciliation where overlap is suspected.
+- [x] Persist only authentication and project-to-job preferences locally.
+      Import preferences from legacy state files without using their sync ledger.
+- [x] Determine sync status from Clockify entry IDs in Zoho Description metadata.
+      Retain recognition of legacy source markers for the same account scope.
+- [x] Leave existing matches unchecked. If selected, skip unchanged logs and update
+      changed logs using their existing Zoho IDs.
+- [x] Treat missing destination logs as new entries, selected by default.
+- [x] Reject duplicate source matches and locked or approved records.
+- [x] Recheck destination data before committing and verify writes afterward.
+      Reconcile ambiguous responses remotely; report unresolved outcomes.
+- [x] Keep manual, unmarked logs separate: matching text does not prove identity.
 
-Done when reruns create no extra logs, selected changes update the same destination,
-and uncertain writes remain blocked until their outcome is known.
+Done when reruns recognize destination metadata across machines and deleted logs
+can be recreated after confirmation. Lookup covers the selected source date span;
+entries moved outside that span require reconciliation. Concurrent executions
+are out of scope.
 
 ## 4. Commit and results
 

@@ -147,3 +147,22 @@ test('Clockify timezone-shifted filters cannot omit entries inside the requested
   } });
   expect((await client.listEntries('2026-09-10T18:30:00Z', '2026-09-11T17:00:00Z')).map(row => row.id)).toEqual(['1', '2']);
 });
+
+test('Zoho writes workItem separately and reads it from taskName', async () => {
+  const title = 'Weekly meeting';
+  const metadata = '{"entryId":"clockify-1"}';
+  const zoho = createZoho(config, { sleep: async () => {}, fetch: async (url, init) => {
+    if (String(url).includes('/oauth/v2/token')) return json({ access_token: 'token', expires_in: 3600 });
+    if (init?.method === 'POST') {
+      const form = new URLSearchParams(String(init.body));
+      expect(form.get('workItem')).toBe(title);
+      expect(form.get('description')).toBe(metadata);
+      return json({ response: { status: 0, result: [{ timeLogId: 'log' }] } });
+    }
+    return json({ response: { status: 0, result: [{ timelogId: 'log', erecno: 'employee', jobId: 'job', workDate: '2026-09-11', hours: '01:00', billingStatus: 'billable', taskName: title, description: metadata }] } });
+  } });
+  const input = { employeeId: 'employee', jobId: 'job', date: '2026-09-11', minutes: 60, billable: true, workItem: title, description: metadata };
+  await zoho.createLog(input);
+  await zoho.updateLog('log', input);
+  expect(await zoho.getLog('log')).toMatchObject({ workItem: title, description: metadata });
+});

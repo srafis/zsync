@@ -49,7 +49,7 @@ The CLI requests `ZOHOPEOPLE.timetracker.ALL`, `ZOHOPEOPLE.forms.READ`, and
 record using your email, and saves the refresh token, region, and employee ID.
 If employee lookup is unavailable, it asks for the numeric employee record ID
 (ERECNO). Later runs reuse the saved authentication without additional exports.
-Run `bun run dev --connect` to reconnect; the sync ledger is preserved.
+Run `bun run dev --connect` to reconnect; saved job preferences are preserved.
 
 Existing `ZOHO_REFRESH_TOKEN`, `ZOHO_REGION`, and `ZOHO_EMPLOYEE_ID` exports
 remain optional overrides. Set `ZOHO_DATE_FORMAT` when your company returns
@@ -59,8 +59,7 @@ non-ISO dates, for example `dd-MM-yyyy` or `MM/dd/yyyy`.
 - [Zoho People time-log API](https://www.zoho.com/people/api/timesheet/add-timelogs.html)
 - [Clockify API](https://docs.clockify.me/)
 
-The CLI refreshes access tokens in memory. Sync state contains mappings and time-log
-snapshots. A separate account-scoped authentication file stores the refresh token
+The CLI refreshes access tokens in memory. Local preferences contain project/job mappings. A separate account-scoped authentication file stores the refresh token
 with owner-only file permissions (0600); client secrets are never saved. Protect
 the state directory because it now contains authentication and work information.
 
@@ -75,8 +74,13 @@ Completed entries are assigned to their **local start date**. An entry beginning
 before midnight and ending afterward is copied whole to its start date. Entries
 longer than 24 hours or rounding to zero minutes are rejected for correction in
 Clockify. Running timers are excluded. Durations round to the nearest minute, and
-the preview shows the duration sent to Zoho. Original Clockify tags appear in the
-picker but are not copied into an unrelated Zoho field.
+the preview shows the duration sent to Zoho. Clockify descriptions become Zoho
+Work Items. Zoho Description stores JSON source metadata: the exact Clockify entry
+ID, project name/ID, tags, original start/end timestamps, and billing flag, followed
+by the existing sync marker. Metadata contains no credentials.
+
+Older synced entries remain unchecked. Select one to move its title into Work Item
+and replace its Description with metadata, updating the existing Zoho log. Selected entries overwrite differing destination fields with Clockify values.
 
 Unsynced entries start checked. Synced entries, including changed ones, start
 unchecked. Selecting an unchanged entry skips it; selecting a changed entry updates
@@ -93,24 +97,26 @@ writes; local job mappings may already have been saved.
 
 ## Reruns and recovery
 
-Each synced log carries a source marker in its description. Keep that marker intact.
-A scoped local ledger records the destination ID and last verified content. The
-CLI checks destination state before writing and reads back changes before declaring
-success. A local exclusive lock prevents two instances from sharing the ledger.
+Sync status comes from metadata in Zoho Description, using the exact Clockify
+entry ID. Matching logs start unchecked; selecting a changed entry updates its
+existing log. Deleting a Zoho log makes the Clockify entry new and checked again.
+Duplicate source IDs and locked logs are conflicts. Unmarked manual logs do not
+count as synced, even if their titles and durations match.
 
-A network timeout does not prove that a create failed. Pending writes are saved
-before requests; on a later run, the CLI looks for the source marker and verifies
-the destination. If it cannot determine the outcome, it refuses another create.
-Manual destination changes, missing mapped logs, duplicate markers, or approved/
-locked logs can require reconciliation. Resolve conflicts in the source/destination
-and rerun; do not delete the state directory merely to force a retry.
+Only authentication and project/job preferences are stored locally. Existing
+legacy state files supply job preferences only; their ledger, pending writes, and
+lock are ignored. New writes store preferences in `synczc-preferences-*.json`.
+Legacy marker-only logs are recognized with their original account scope; logs
+containing the exact entry ID work across machines and OAuth clients.
 
-If a process crashes and leaves a lock, ensure no synczc process is running before
-removing only the lock named in the error. Preserve the ledger and pending records.
-Do not run against the same destination concurrently from different machines or
-state directories. Destination-side uniqueness is not guaranteed by these APIs.
-Pre-existing manual Zoho logs lack source IDs; apparent matches require explicit
-reconciliation, not automatic adoption.
+The CLI rechecks Zoho before committing and verifies each write. A timed-out write
+is reconciled using remote metadata, never blindly retried in the same run. If
+verification remains uncertain, inspect Zoho before rerunning. No persistent pending
+queue or concurrent-execution protection is provided.
+
+Lookup covers the selected entries' date span. If a previously synced entry moves
+to a different date outside that span, reconcile the old Zoho log before syncing
+again. Do not run syncs simultaneously on multiple machines.
 
 Clockify remains the source of truth. This tool does not delete destination logs,
 submit or approve timesheets, or synchronize Zoho edits back to Clockify. Zoho
@@ -127,6 +133,6 @@ tests use fictional responses and never create actual time logs.
 Default state directories are `~/.local/share/synczc` on Linux (or under
 `XDG_DATA_HOME`), `~/Library/Application Support/synczc` on macOS, and
 `%APPDATA%/synczc` on Windows. Changing the OAuth client or employee changes the
-account scope; reconcile existing logs before using a different scope for the same
-source entries. Supported Zoho region codes are `com`, `eu`, `in`, `au`, `cn`, `jp`,
+account scope for local preferences. Exact entry IDs in remote metadata still
+identify synced entries across OAuth clients. Supported Zoho region codes are `com`, `eu`, `in`, `au`, `cn`, `jp`,
 `ca`, `sa`, and `uk`; availability and permissions depend on your People account.
