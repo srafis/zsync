@@ -36,7 +36,7 @@ describe("configuration", () => {
     expect(loaded.zohoDateFormat).toBe("yyyy-MM-dd");
     expect(loaded.timezone).toBe("UTC");
     expect(loaded.stateDir).toBe("/tmp/custom");
-    expect(() => loadConfig({})).toThrow("ZOHO_REGION");
+    expect(() => loadConfig({})).toThrow("CLOCKIFY_API_KEY");
     expect(() => loadConfig({ ...env, ZOHO_REGION: "invalid" })).toThrow("ZOHO_REGION");
     expect(() => loadConfig({ ...env, ZOHO_DATE_FORMAT: "bad" })).toThrow("ZOHO_DATE_FORMAT");
   });
@@ -130,4 +130,20 @@ test("expired read token refreshes once; returned access tokens are redacted", a
   await expect(zoho.listJobs()).rejects.toThrow("Invalid [redacted]");
   expect(tokens).toBe(2);
   expect(reads).toBe(2);
+});
+
+test('Clockify timezone-shifted filters cannot omit entries inside the requested range', async () => {
+  const rows = ['2026-09-10T17:00:00Z', '2026-09-11T11:00:00Z', '2026-09-11T13:00:00Z', '2026-09-11T19:00:00Z'].map((start, index) => ({
+    id: String(index), userId: 'user', projectId: null, tagIds: [], description: '', billable: false,
+    timeInterval: { start, end: new Date(Date.parse(start) + 3600000).toISOString() },
+  }));
+  const client = createClockify(config, { fetch: async input => {
+    const url = new URL(String(input));
+    if (!url.pathname.endsWith('/time-entries')) return json([]);
+    const shift = 5.5 * 3600000;
+    const start = Date.parse(url.searchParams.get('start')!) - shift;
+    const end = Date.parse(url.searchParams.get('end')!) - shift;
+    return json(rows.filter(row => Date.parse(row.timeInterval.start) >= start && Date.parse(row.timeInterval.start) < end));
+  } });
+  expect((await client.listEntries('2026-09-10T18:30:00Z', '2026-09-11T17:00:00Z')).map(row => row.id)).toEqual(['1', '2']);
 });

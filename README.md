@@ -34,23 +34,35 @@ Clockify uses its global API endpoint; regional Clockify workspaces are not yet
 supported. It requires an API key, workspace ID, and user ID. The configured user must
 match the authenticated account. API keys are available in Clockify profile settings.
 
-Zoho People requires an OAuth client ID, client secret, refresh token, region, and
-employee record ID. Set `ZOHO_DATE_FORMAT` to the company date format when
-Zoho returns non-ISO dates, for example `dd-MM-yyyy` or `MM/dd/yyyy`. The CLI must
-not guess whether a date such as 04/05 means April 5 or May 4. Client credentials alone do not authorize access to timesheets.
-Create a client in your region's Zoho API Console and authorize the People
-`ZOHOPEOPLE.timetracker.ALL` scope, then exchange the authorization code for a refresh
-token using Zoho's documented OAuth flow. Do this privately; do not paste tokens into
-issues, logs, or screenshots. Use an employee record ID, also called ERECNO, rather
-than assuming the visible employee number is the same value.
+Only five shell exports are required: `CLOCKIFY_API_KEY`, `CLOCKIFY_USER_ID`,
+`CLOCKIFY_WORKSPACE_ID`, `ZOHO_CLIENT_ID`, and `ZOHO_CLIENT_SECRET`.
+
+On first run, browser authorization starts automatically. The default data center
+is `people.zoho.com`; `ZOHO_REGION` remains an optional override.
+Register `http://localhost:8765/callback` in your server-based OAuth client once.
+The CLI starts a temporary loopback listener and opens the consent URL. After
+authorization, the CLI continues automatically. The listener closes after the
+callback, cancellation, or a five-minute timeout. Port 8765 must be available.
+
+The CLI requests `ZOHOPEOPLE.timetracker.ALL`, `ZOHOPEOPLE.forms.READ`, and
+`AaaServer.profile.READ`. It exchanges the code, looks up your People employee
+record using your email, and saves the refresh token, region, and employee ID.
+If employee lookup is unavailable, it asks for the numeric employee record ID
+(ERECNO). Later runs reuse the saved authentication without additional exports.
+Run `bun run dev --connect` to reconnect; the sync ledger is preserved.
+
+Existing `ZOHO_REFRESH_TOKEN`, `ZOHO_REGION`, and `ZOHO_EMPLOYEE_ID` exports
+remain optional overrides. Set `ZOHO_DATE_FORMAT` when your company returns
+non-ISO dates, for example `dd-MM-yyyy` or `MM/dd/yyyy`.
 
 - [Zoho People OAuth setup](https://www.zoho.com/people/api/oauth-steps.html)
 - [Zoho People time-log API](https://www.zoho.com/people/api/timesheet/add-timelogs.html)
 - [Clockify API](https://docs.clockify.me/)
 
 The CLI refreshes access tokens in memory. Sync state contains mappings and time-log
-snapshots, but never stores OAuth credentials. Treat the state directory as private
-because descriptions can contain work information.
+snapshots. A separate account-scoped authentication file stores the refresh token
+with owner-only file permissions (0600); client secrets are never saved. Protect
+the state directory because it now contains authentication and work information.
 
 ## Selection and mapping
 

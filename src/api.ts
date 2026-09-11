@@ -15,7 +15,7 @@ type ApiOptions = { fetch?: Fetcher; sleep?: Sleep; timeoutMs?: number };
 type RecordValue = Record<string, unknown>;
 type RateState = { lastAt: number; queue: Promise<void> };
 
-const ZOHO_REGIONS: Record<string, { accounts: string; people: string }> = {
+export const ZOHO_REGIONS: Record<string, { accounts: string; people: string }> = {
   com: { accounts: "accounts.zoho.com", people: "people.zoho.com" },
   eu: { accounts: "accounts.zoho.eu", people: "people.zoho.eu" },
   in: { accounts: "accounts.zoho.in", people: "people.zoho.in" },
@@ -154,8 +154,8 @@ function defaultStateDir(env: Record<string, string | undefined>): string {
 }
 
 export function loadConfig(env: Record<string, string | undefined> = process.env): Config {
-  const region = envValue(env, "ZOHO_REGION").toLowerCase();
-  if (!ZOHO_REGIONS[region]) throw new Error(`Unsupported ZOHO_REGION ${region}; use a supported Zoho data-center code`);
+  const region = (env.ZOHO_REGION?.trim() || "").toLowerCase();
+  if (region && !ZOHO_REGIONS[region]) throw new Error(`Unsupported ZOHO_REGION ${region}; use a supported Zoho data-center code`);
   const timezone = validateTimezone(env.SYNCZC_TIMEZONE?.trim() || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC");
   return {
     clockifyKey: envValue(env, "CLOCKIFY_API_KEY"),
@@ -163,10 +163,10 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     clockifyUserId: envValue(env, "CLOCKIFY_USER_ID"),
     zohoClientId: envValue(env, "ZOHO_CLIENT_ID"),
     zohoClientSecret: envValue(env, "ZOHO_CLIENT_SECRET"),
-    zohoRefreshToken: envValue(env, "ZOHO_REFRESH_TOKEN"),
+    zohoRefreshToken: env.ZOHO_REFRESH_TOKEN?.trim() || "",
     zohoRegion: region,
     zohoDateFormat: dateFormat(env.ZOHO_DATE_FORMAT?.trim() || "yyyy-MM-dd"),
-    zohoEmployeeId: envValue(env, "ZOHO_EMPLOYEE_ID"),
+    zohoEmployeeId: env.ZOHO_EMPLOYEE_ID?.trim() || "",
     timezone,
     stateDir: env.SYNCZC_STATE_DIR?.trim() || defaultStateDir(env),
   };
@@ -239,7 +239,9 @@ export function createClockify(config: Config, options: ApiOptions = {}) {
         fetcher,
         config,
         `/workspaces/${encodeURIComponent(config.clockifyWorkspaceId)}/user/${encodeURIComponent(config.clockifyUserId)}/time-entries`,
-        { start: startISO, end: endISO },
+        // Clockify can interpret these filters in the account timezone despite Z.
+        // Cover every UTC offset, then enforce the exact instant range below.
+        { start: new Date(rangeStart - 86400_000).toISOString(), end: new Date(rangeEnd + 86400_000).toISOString() },
         options,
       ),
     ]);
@@ -274,7 +276,7 @@ export function createClockify(config: Config, options: ApiOptions = {}) {
         projectId: raw.projectId,
         projectName: raw.projectId === null ? "" : projectNames.get(raw.projectId) ?? raw.projectId,
         tags: tagIds.map((tagId) => tagNames.get(tagId) ?? tagId),
-        description: raw.description === undefined || raw.description === null ? "" : valueString(raw.description, "description", "Clockify time entry"),
+        description: raw.description === undefined || raw.description === null ? "" : typeof raw.description === "string" ? raw.description : valueString(raw.description, "description", "Clockify time entry"),
         start,
         end,
         billable: raw.billable,

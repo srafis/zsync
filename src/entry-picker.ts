@@ -55,7 +55,7 @@ export function pickEntries(rows: PickerRow[]): Promise<string[] | symbol> {
       const heading = (text: string) => `${symbol(this.state)}  ${fitCell(text, Math.max(0, columns - 4)).trimEnd()}`;
       if (this.state === 'submit') {
         const selected = rows.filter(row => this.value?.includes(row.entry.id));
-        if (!selected.length) return gap;
+        if (!selected.length) return '';
         const table = entryTable(selected, columns);
         return [gap, heading('Selected entries'), gap,
           mutedLine(`│     ${table.header}`),
