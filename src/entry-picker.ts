@@ -29,7 +29,7 @@ export function entryTable(rows: PickerRow[], columns: number) {
   if (columns >= 90) fields.push({ title: 'Date', size: 10, value: row => row.input.date });
   if (columns >= 110) fields.push({ title: 'Tags', size: 14, value: row => row.entry.tags.join('/') || '—' });
   const used = fields.reduce((sum, field) => sum + field.size + 3, 0);
-  fields.push({ title: 'Description', size: Math.max(1, available - used), value: row => row.entry.description || '—' });
+  fields.push({ title: 'Description', size: Math.max(1, available - used), value: row => `${row.status === 'changed' ? '[changed] ' : ''}${row.entry.description || '—'}` });
   const line = (cells: string[]) => fitCell(cells.join(' │ '), available).trimEnd();
   return {
     header: line(fields.map(field => fitCell(field.title, field.size))),
@@ -41,7 +41,7 @@ export function entryTable(rows: PickerRow[], columns: number) {
 export function pickEntries(rows: PickerRow[]): Promise<string[] | symbol> {
   return new MultiSelectPrompt({
     options: rows.map(row => ({ value: row.entry.id })),
-    initialValues: rows.filter(row => row.status === 'new').map(row => row.entry.id),
+    initialValues: rows.filter(row => row.status === 'new' || row.status === 'changed').map(row => row.entry.id),
     required: false,
     render() {
       const columns = process.stdout.columns || 80;
@@ -80,6 +80,7 @@ export function pickEntries(rows: PickerRow[]): Promise<string[] | symbol> {
         mutedLine(`│     ${table.header}`),
         mutedLine(`│     ${table.separator}`), ...visible,
         gap, line(`│  ${selected.size}/${rows.length} selected · ${start + 1}–${Math.min(start + count, rows.length)} shown`),
+        ...(focused?.status === 'changed' ? [line('│  Changed · updates the existing Zoho entry')] : []),
         ...(focused?.reason ? [line(`│  ${focused.reason}`)] : []),
         mutedLine('└  ↑↓ move · Space toggle · Enter confirm · Esc cancel'),
       ].join('\n');

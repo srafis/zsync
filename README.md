@@ -92,7 +92,7 @@ bun run dev
 3. Choose a Zoho job for each unmapped Clockify project. zsync remembers your choices. An exact, unique match with a Zoho project or job name is selected automatically.
 4. Review your selection and submit the final Yes/No prompt. Yes is selected initially, but you still have to confirm it.
 
-New entries start selected. Previously synced entries, including changed ones, start unselected. Select a changed entry to update its existing Zoho log. An unchanged entry is skipped.
+New and changed entries start selected. Changed rows show `[changed]` before their description and update the existing Zoho log when confirmed. Unchanged synced entries start unselected and are skipped if selected.
 
 Choosing No or cancelling before the sync makes no time-log changes in Zoho. Job mappings may already have been saved locally.
 

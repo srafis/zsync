@@ -12,7 +12,7 @@ const row: PickerRow = {
 
 test('table fits terminal cells at narrow and wide widths without a status column', () => {
   for (const columns of [20, 40, 60, 80, 90, 100, 110, 160, 240]) {
-    const table = entryTable([row, { ...row, status: 'conflict' }], columns);
+    const table = entryTable([row, { ...row, status: 'conflict' }, { ...row, status: 'changed' }], columns);
     for (const line of [table.header, table.separator, ...table.labels]) {
       expect(width(line) + 6).toBeLessThan(columns);
       expect(line).not.toMatch(/[\n\r\x1b]/);
@@ -23,4 +23,10 @@ test('table fits terminal cells at narrow and wide widths without a status colum
   }
   expect(fitCell('👨‍👩‍👧‍👦abc', 3)).toBe('👨‍👩‍👧‍👦…');
   expect(width(fitCell('映画', 3))).toBe(3);
+});
+
+test('changed entries are labelled in both picker and confirmation tables', () => {
+  const table = entryTable([{ ...row, status: 'changed' }, row], 110);
+  expect(table.labels[0]).toContain('[changed]');
+  expect(table.labels[1]).not.toContain('[changed]');
 });
