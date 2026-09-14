@@ -7,7 +7,7 @@ import { createServer } from 'node:http';
 import { ZOHO_REGIONS } from './api.ts';
 import type { Config } from './types.ts';
 
-const scopes = 'ZOHOPEOPLE.timetracker.ALL,ZOHOPEOPLE.forms.READ,AaaServer.profile.READ';
+const scopes = 'ZOHOPEOPLE.timetracker.ALL,ZOHOPEOPLE.forms.READ,ZOHOPEOPLE.forms.CREATE,AaaServer.profile.READ';
 const redirect = 'http://localhost:8765/callback';
 type SavedAuth = { region: string; refreshToken: string; employeeId: string };
 function answer<T>(value: T | symbol): T {

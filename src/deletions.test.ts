@@ -5,7 +5,7 @@ import { findDeletions, deleteConfirmed } from './deletions.ts';
 import type { Config, RemoteLog } from './types.ts';
 
 const config = { clockifyWorkspaceId: 'workspace', clockifyUserId: 'user', zohoEmployeeId: 'employee' } as Config;
-const input = entryInput({ id: 'entry', projectId: null, projectName: '', tags: [], description: 'Meeting', start: '2026-09-11T10:00:00Z', end: '2026-09-11T11:00:00Z', billable: false }, 'job', 'employee', 'UTC', { workspaceId: 'workspace', userId: 'user' });
+const input = entryInput({ id: 'entry', projectId: null, projectName: '', tags: [], description: 'Meeting', start: '2026-09-11T10:00:00Z', end: '2026-09-11T11:00:00Z', billable: false }, 'project', 'job', 'employee', 'UTC', { workspaceId: 'workspace', userId: 'user' });
 const marker = createHash('sha256').update('\0entry').digest('hex');
 const log: RemoteLog = { ...input, id: 'zoho', description: `${input.description}\n\n[zsync-source:${marker}]` };
 

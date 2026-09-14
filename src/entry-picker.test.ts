@@ -6,7 +6,7 @@ const row: PickerRow = {
   entry: { id: 'one', projectId: 'p', projectName: '映画制作 🎬', tags: ['Meeting', '計画'],
     description: 'Feature planning 👨‍👩‍👧‍👦 e\u0301 discussion '.repeat(30) + '\n\x1b[31mred',
     start: '', end: '', billable: false },
-  input: { date: '2026-09-11', minutes: 229, jobId: 'j', employeeId: 'e', description: '', billable: false },
+  input: { projectId: 'p', date: '2026-09-11', minutes: 229, jobId: 'j', employeeId: 'e', description: '', billable: false },
   status: 'new',
 };
 

@@ -34,7 +34,7 @@ export function dateRange(name: RangeName, zone: string, now = Temporal.Now.inst
 
 // Entries belong to their local start date, even when they end the next day.
 // This keeps one stable source ID per log across overlapping date selections.
-export function entryInput(entry: Entry, jobId: string, employeeId: string, zone: string, source?: { workspaceId: string; userId: string }): LogInput {
+export function entryInput(entry: Entry, projectId: string, jobId: string, employeeId: string, zone: string, source?: { workspaceId: string; userId: string }): LogInput {
   const start = Temporal.Instant.from(entry.start);
   const end = Temporal.Instant.from(entry.end);
   const seconds = Number(end.epochNanoseconds - start.epochNanoseconds) / 1e9;
@@ -43,7 +43,7 @@ export function entryInput(entry: Entry, jobId: string, employeeId: string, zone
   }
   const minutes = Math.round(seconds / 60);
   if (minutes < 1) throw new Error(`Entry ${entry.id} rounds to zero minutes. Adjust it in Clockify before syncing.`);
-  return { jobId, employeeId, date: start.toZonedDateTimeISO(zone).toPlainDate().toString(), minutes,
+  return { projectId, jobId, employeeId, date: start.toZonedDateTimeISO(zone).toPlainDate().toString(), minutes,
     workItem: entry.description,
     description: [
       'source: Clockify',
@@ -72,4 +72,3 @@ export function hhmm(minutes: number): string {
 export function cleanText(text: string): string {
   return text.replace(/\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|$))/g, '').replace(/[\x00-\x1f\x7f-\x9f\u202a-\u202e\u2066-\u2069]/g, ' ');
 }
-

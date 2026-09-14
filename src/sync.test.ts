@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { commit, openStore, prepare, type Destination, type LogInput, type RemoteLog } from "./sync";
 
 const input: LogInput = {
+  projectId: "project-1",
   jobId: "job-1",
   employeeId: "employee-1",
   date: "2026-09-11",
@@ -61,7 +62,7 @@ test('Zoho metadata is authoritative across machines and OAuth clients; deleted 
     await commit(first, destination, await prepare(first, destination, [{ key: 'entry-1', input: entry }]));
     expect(destination.logs[0]!.description).toContain('[zsync-source:');
     expect((await prepare(second, destination, [{ key: 'entry-1', input: entry }]))[0]?.status).toBe('skip');
-    const changed = entryInput({ id: 'entry-1', projectId: null, projectName: '', tags: ['call'], description: 'Updated meeting', start: '2026-09-11T10:00:00Z', end: '2026-09-11T11:00:00Z', billable: true }, 'job-1', 'employee-1', 'UTC');
+    const changed = entryInput({ id: 'entry-1', projectId: null, projectName: '', tags: ['call'], description: 'Updated meeting', start: '2026-09-11T10:00:00Z', end: '2026-09-11T11:00:00Z', billable: true }, 'project-1', 'job-1', 'employee-1', 'UTC');
     const plan = await prepare(second, destination, [{ key: 'entry-1', input: changed }]);
     expect(plan[0]?.status).toBe('update');
     expect((await commit(second, destination, plan))[0]?.status).toBe('updated');
@@ -105,18 +106,17 @@ test('lost create response reconciles from Zoho without a local ledger', async (
   } finally { await store.close(); await rm(directory, { recursive: true }); }
 });
 
-test('old ledger and lock are ignored; only job preferences are migrated', async () => {
+test('project preferences are saved in the new format', async () => {
   const { createHash } = await import('node:crypto');
   const directory = await testDirectory();
   const hash = createHash('sha256').update('scope').digest('hex').slice(0, 32);
-  await writeFile(join(directory, 'zsync.lock'), 'stale');
-  await writeFile(join(directory, `zsync-state-${hash}.json`), JSON.stringify({ scope: 'scope', mappings: { project: 'job' }, ledger: { entry: { remoteId: 'deleted' } }, pending: { entry: {} } }));
+  await writeFile(join(directory, `zsync-project-preferences-${hash}.json`), JSON.stringify({ scope: 'scope', projectMappings: { project: 'zoho-project' } }));
   const store = await openStore(directory, 'scope');
   try {
-    expect(store.mappings.project).toBe('job');
+    expect(store.projectMappings.project).toBe('zoho-project');
     expect((await prepare(store, new MockDestination(), [{ key: 'entry', input }]))[0]?.status).toBe('create');
     await store.saveMappings();
-    const saved = JSON.parse(await readFile(join(directory, `zsync-preferences-${hash}.json`), 'utf8'));
-    expect(saved).toEqual({ scope: 'scope', mappings: { project: 'job' } });
+    const saved = JSON.parse(await readFile(join(directory, `zsync-project-preferences-${hash}.json`), 'utf8'));
+    expect(saved).toEqual({ scope: 'scope', projectMappings: { project: 'zoho-project' } });
   } finally { await store.close(); await rm(directory, { recursive: true }); }
 });

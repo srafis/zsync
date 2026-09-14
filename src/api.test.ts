@@ -70,11 +70,11 @@ describe("Zoho client", () => {
       }
       if (url.includes("getjobs")) {
         const index = new URL(url).searchParams.get("sIndex");
-        const rows = index === "0" ? Array.from({ length: 200 }, (_, i) => ({ jobId: `job-${i}`, jobName: `Job ${i}` })) : [{ jobId: "job-last", jobName: "Last job", projectName: "Project" }];
+        const rows = index === "0" ? Array.from({ length: 200 }, (_, i) => ({ jobId: `job-${i}`, jobName: `Job ${i}`, projectId: "project" })) : [{ jobId: "job-last", jobName: "Last job", projectName: "Project", projectId: "project" }];
         return json({ response: { status: 0, result: rows, isNextAvailable: index === "0" } });
       }
       const index = new URL(url).searchParams.get("sIndex");
-      const rows = [{ erecno: "employee", timelogId: index === "0" ? "log-1" : "log-2", jobId: "job-1", workDate: "2026-09-10", hours: "01:30", totaltime: 5400, billingStatus: "billable", description: "[zsync:entry-1] work" }];
+      const rows = [{ erecno: "employee", timelogId: index === "0" ? "log-1" : "log-2", projectId: "project", jobId: "job-1", workDate: "2026-09-10", hours: "01:30", totaltime: 5400, billingStatus: "billable", description: "[zsync:entry-1] work" }];
       return json({ response: { status: 0, result: rows, isNextAvailable: false } });
     };
     const zoho = createZoho(config, { fetch: fetcher, sleep: async () => {} });
@@ -93,13 +93,14 @@ describe("Zoho client", () => {
       return json({ response: { status: 0, result: [{ timeLogId: "log-1" }] } });
     };
     const zoho = createZoho(config, { fetch: fetcher, sleep: async () => {} });
-    const input = { employeeId: "employee", jobId: "job-1", date: "2026-09-10", minutes: 90, description: "[zsync:entry-1] work", billable: true };
+    const input = { projectId: "project", employeeId: "employee", jobId: "job-1", date: "2026-09-10", minutes: 90, description: "[zsync:entry-1] work", billable: true };
     expect(await zoho.createLog(input)).toBe("log-1");
     await zoho.updateLog("log-1", input);
     expect(calls).toHaveLength(2);
     expect(calls[0]!.method).toBe("POST");
     expect(calls[0]!.url).not.toContain("refresh-secret");
     expect(calls[0]!.body).toContain("user=employee");
+    expect(calls[0]!.body).toContain("projectId=project");
     expect(calls[0]!.body).toContain("jobId=job-1");
     expect(calls[0]!.body).toContain("hours=01%3A30");
     expect(calls[0]!.body).toContain("description=%5Bzsync%3Aentry-1%5D+work");
@@ -111,11 +112,28 @@ describe("Zoho client", () => {
   test("parses the configured company date format without guessing day/month order", async () => {
     const fetcher = async (input: string | URL | Request) => String(input).includes("/oauth/v2/token")
       ? json({ access_token: "access", expires_in: 3600 })
-      : json({ response: { status: 0, result: [{ erecno: "employee", timelogId: "log-1", jobId: "job-1", workDate: "09/10/2026", hours: "01:00", billingStatus: "billable", description: "" }] } });
+      : json({ response: { status: 0, result: [{ erecno: "employee", timelogId: "log-1", projectId: "project", jobId: "job-1", workDate: "09/10/2026", hours: "01:00", billingStatus: "billable", description: "" }] } });
     const usDate = createZoho({ ...config, zohoDateFormat: "MM/dd/yyyy" }, { fetch: fetcher, sleep: async () => {} });
-    const euDate = createZoho({ ...config, zohoDateFormat: "dd/MM/yyyy" }, { fetch: async (input) => String(input).includes("/oauth/v2/token") ? json({ access_token: "access", expires_in: 3600 }) : json({ response: { status: 0, result: [{ erecno: "employee", timelogId: "log-1", jobId: "job-1", workDate: "10/09/2026", hours: "01:00", billingStatus: "billable", description: "" }] } }), sleep: async () => {} });
+    const euDate = createZoho({ ...config, zohoDateFormat: "dd/MM/yyyy" }, { fetch: async (input) => String(input).includes("/oauth/v2/token") ? json({ access_token: "access", expires_in: 3600 }) : json({ response: { status: 0, result: [{ erecno: "employee", timelogId: "log-1", projectId: "project", jobId: "job-1", workDate: "10/09/2026", hours: "01:00", billingStatus: "billable", description: "" }] } }), sleep: async () => {} });
     expect((await usDate.listLogs("2026-09-10", "2026-09-10"))[0]!.date).toBe("2026-09-10");
     expect((await euDate.listLogs("2026-09-10", "2026-09-10"))[0]!.date).toBe("2026-09-10");
+  });
+
+  test("lists projects and creates an assigned job under the selected project", async () => {
+    const fetcher = async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/oauth/v2/token")) return json({ access_token: "access", expires_in: 3600 });
+      if (url.includes("getprojects")) return json({ response: { status: 0, result: [{ projectId: "project", projectName: "Project" }] } });
+      if (url.includes("getjobs")) return json({ response: { status: 0, result: [{ jobId: "old-job", jobName: "Tag", projectId: "project" }] } });
+      expect(url).toContain("/forms/json/P_TimesheetJob/insertRecord");
+      expect(init?.method).toBe("POST");
+      expect(JSON.parse(new URLSearchParams(String(init?.body)).get("inputData")!)).toEqual({ Job_Name: "New tag", Project: "project", Assignees: "employee" });
+      return json({ response: { status: 0, result: { pkId: "new-job" } } });
+    };
+    const zoho = createZoho(config, { fetch: fetcher, sleep: async () => {} });
+    expect(await zoho.listProjects()).toEqual([{ id: "project", name: "Project" }]);
+    expect(await zoho.listJobs()).toMatchObject([{ id: "old-job", name: "Tag", projectId: "project" }]);
+    expect(await zoho.createJob("New tag", "project")).toEqual({ id: "new-job", name: "New tag", projectId: "project" });
   });
 });
 
@@ -159,9 +177,9 @@ test('Zoho writes workItem separately and reads it from taskName', async () => {
       expect(form.get('description')).toBe(metadata);
       return json({ response: { status: 0, result: [{ timeLogId: 'log' }] } });
     }
-    return json({ response: { status: 0, result: [{ timelogId: 'log', erecno: 'employee', jobId: 'job', workDate: '2026-09-11', hours: '01:00', billingStatus: 'billable', taskName: title, description: metadata }] } });
+    return json({ response: { status: 0, result: [{ timelogId: 'log', erecno: 'employee', projectId: 'project', jobId: 'job', workDate: '2026-09-11', hours: '01:00', billingStatus: 'billable', taskName: title, description: metadata }] } });
   } });
-  const input = { employeeId: 'employee', jobId: 'job', date: '2026-09-11', minutes: 60, billable: true, workItem: title, description: metadata };
+  const input = { projectId: 'project', employeeId: 'employee', jobId: 'job', date: '2026-09-11', minutes: 60, billable: true, workItem: title, description: metadata };
   await zoho.createLog(input);
   await zoho.updateLog('log', input);
   expect(await zoho.getLog('log')).toMatchObject({ workItem: title, description: metadata });

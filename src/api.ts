@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { RejectedWriteError } from "./types.ts";
-import type { Config, Destination, Entry, Job, LogInput, RemoteLog } from "./types.ts";
+import type { Config, Destination, Entry, Job, LogInput, Project, RemoteLog } from "./types.ts";
 
 const CLOCKIFY_API = "https://api.clockify.me/api/v1";
 const PAGE_SIZE = 200;
@@ -422,6 +422,7 @@ function remoteLog(raw: RecordValue, config: Config, context: string): RemoteLog
     approvalStatus === "pending" || editAllowed === false || editAllowed === "false";
   return {
     id: valueId(raw.timelogId, "timelogId", context),
+    projectId: raw.projectId === undefined || raw.projectId === null ? "__unmapped__" : valueId(raw.projectId, "projectId", context),
     jobId: valueId(raw.jobId, "jobId", context),
     employeeId,
     date: parseZohoDate(raw.workDate, config.zohoDateFormat ?? "yyyy-MM-dd", context, raw.db_workDate),
@@ -436,8 +437,8 @@ function remoteLog(raw: RecordValue, config: Config, context: string): RemoteLog
 function logFields(input: LogInput, config: Config): Record<string, string> {
   if (input.employeeId !== config.zohoEmployeeId) throw new Error("Zoho log employeeId does not match configured employee");
   validDate(input.date, "log date");
-  if (!input.jobId || !Number.isInteger(input.minutes) || input.minutes < 1 || input.minutes > MAX_MINUTES) {
-    throw new Error("Zoho log requires a job and 1-1440 whole minutes");
+  if (!input.projectId || !input.jobId || !Number.isInteger(input.minutes) || input.minutes < 1 || input.minutes > MAX_MINUTES) {
+    throw new Error("Zoho log requires a project, job, and 1-1440 whole minutes");
   }
   if (typeof input.description !== "string" || input.description.length > 15_000) throw new Error("Zoho log description is malformed or too long");
   if (input.workItem !== undefined && typeof input.workItem !== "string") throw new Error("Zoho workItem is malformed");
@@ -445,6 +446,7 @@ function logFields(input: LogInput, config: Config): Record<string, string> {
   const format = dateFormat(config.zohoDateFormat ?? "yyyy-MM-dd");
   return {
     user: input.employeeId,
+    projectId: input.projectId,
     jobId: input.jobId,
     workDate: formatDate(input.date, format),
     dateFormat: format,
@@ -455,7 +457,7 @@ function logFields(input: LogInput, config: Config): Record<string, string> {
   };
 }
 
-export function createZoho(config: Config, options: ApiOptions = {}): Destination & { validate(): Promise<void>; listJobs(): Promise<Job[]>; deleteLog(id: string): Promise<void> } {
+export function createZoho(config: Config, options: ApiOptions = {}): Destination & { validate(): Promise<void>; listProjects(): Promise<Project[]>; listJobs(): Promise<Job[]>; createJob(name: string, projectId: string): Promise<Job>; deleteLog(id: string): Promise<void> } {
   const region = ZOHO_REGIONS[config.zohoRegion.toLowerCase()];
   if (!region) throw new Error(`Unsupported Zoho region ${config.zohoRegion}`);
   const { accounts, people } = region;
@@ -529,8 +531,43 @@ export function createZoho(config: Config, options: ApiOptions = {}): Destinatio
     return zohoStatus(body, `Zoho ${path}`, secrets);
   }
 
+  const projectsRate: RateState = { lastAt: 0, queue: Promise.resolve() };
   const jobsRate: RateState = { lastAt: 0, queue: Promise.resolve() };
   const logsRate: RateState = { lastAt: 0, queue: Promise.resolve() };
+
+  async function listProjects(): Promise<Project[]> {
+    const projects: Project[] = [];
+    for (let index = 0; ; ) {
+      const response = await rateLimit(projectsRate, ZOHO_WRITE_INTERVAL_MS, sleep, () => zohoPage("/timetracker/getprojects", {
+        assignedTo: config.zohoEmployeeId,
+        projectStatus: "inprogress",
+        sIndex: String(index),
+        limit: String(PAGE_SIZE),
+      }));
+      if (!Array.isArray(response.result) || !response.result.every(isRecord)) throw new Error("Zoho getprojects returned malformed result");
+      for (const raw of response.result) projects.push({
+        id: valueId(raw.projectId, "projectId", "Zoho project"),
+        name: valueString(raw.projectName, "projectName", "Zoho project"),
+      });
+      if (!boolValue(response.isNextAvailable) || response.result.length === 0) return projects;
+      index += response.result.length;
+    }
+  }
+
+  async function createJob(name: string, projectId: string): Promise<Job> {
+    const jobName = name.trim();
+    if (!jobName || !projectId) throw new Error("Zoho job requires a name and project");
+    const inputData = JSON.stringify({ Job_Name: jobName, Project: projectId, Assignees: config.zohoEmployeeId });
+    const body = await rateLimit(jobsRate, ZOHO_WRITE_INTERVAL_MS, sleep, () => zohoRequest(
+      "/forms/json/P_TimesheetJob/insertRecord",
+      { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: formBody({ inputData }) },
+      true,
+    ));
+    const response = zohoStatus(body, "Zoho create job", secrets, true);
+    const result = Array.isArray(response.result) ? response.result[0] : response.result;
+    if (!isRecord(result)) throw new Error("Zoho create job returned malformed result; write outcome may be uncertain");
+    return { id: valueId(result.pkId, "pkId", "Zoho create job"), name: jobName, projectId };
+  }
 
   async function listJobs(): Promise<Job[]> {
     const jobs: Job[] = [];
@@ -546,7 +583,11 @@ export function createZoho(config: Config, options: ApiOptions = {}): Destinatio
       for (const raw of response.result) {
         const status = typeof raw.jobStatus === "string" ? raw.jobStatus.toLowerCase() : "";
         if (status.includes("completed") || status.includes("inactive")) continue;
-        const job: Job = { id: valueId(raw.jobId, "jobId", "Zoho job"), name: valueString(raw.jobName, "jobName", "Zoho job") };
+        const job: Job = {
+          id: valueId(raw.jobId, "jobId", "Zoho job"),
+          name: valueString(raw.jobName, "jobName", "Zoho job"),
+          projectId: raw.projectId === undefined || raw.projectId === null ? "__unmapped__" : valueId(raw.projectId, "projectId", "Zoho job"),
+        };
         if (raw.projectName !== undefined) {
           if (typeof raw.projectName !== "string") throw new Error("Zoho job projectName is malformed");
           job.projectName = raw.projectName;
@@ -631,5 +672,5 @@ export function createZoho(config: Config, options: ApiOptions = {}): Destinatio
     });
   }
 
-  return { validate: async () => { await listJobs(); }, listJobs, listLogs, getLog, createLog, updateLog, deleteLog };
+  return { validate: async () => { await Promise.all([listProjects(), listJobs()]); }, listProjects, listJobs, createJob, listLogs, getLog, createLog, updateLog, deleteLog };
 }

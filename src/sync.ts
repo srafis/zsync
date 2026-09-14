@@ -20,7 +20,7 @@ export type CommitResult = {
 };
 
 export type Store = {
-  mappings: Record<string, string>;
+  projectMappings: Record<string, string>;
   saveMappings(): Promise<void>;
   close(): Promise<void>;
 };
@@ -55,7 +55,8 @@ function isDate(value: unknown): value is string {
 }
 
 function validateInput(value: unknown, label: string, minimumMinutes = 1): asserts value is LogInput {
-  if (!isRecord(value) || typeof value.jobId !== "string" || !value.jobId ||
+  if (!isRecord(value) || typeof value.projectId !== "string" || !value.projectId ||
+      typeof value.jobId !== "string" || !value.jobId ||
       typeof value.employeeId !== "string" || !value.employeeId || !isDate(value.date) ||
       typeof value.minutes !== "number" || !Number.isInteger(value.minutes) || value.minutes < minimumMinutes || value.minutes > 1440 ||
       (value.workItem !== undefined && typeof value.workItem !== "string") ||
@@ -97,6 +98,7 @@ function markedInput(input: LogInput, marker: string): LogInput {
 
 function comparable(input: LogInput | RemoteLog): LogInput {
   return {
+    projectId: input.projectId,
     jobId: input.jobId,
     employeeId: input.employeeId,
     date: input.date,
@@ -112,14 +114,15 @@ function sameFields(left: LogInput | RemoteLog, right: LogInput | RemoteLog): bo
 }
 
 function samePlannedFields(remote: RemoteLog, input: LogInput): boolean {
-  if (input.jobId !== "__unmapped__") return sameFields(remote, input);
-  return sameFields(remote, { ...input, jobId: remote.jobId });
+  if (input.projectId === "__unmapped__" || input.jobId === "__unmapped__") return false;
+  return sameFields(remote, input);
 }
 
 function remoteSnapshot(logs: RemoteLog[]): string {
   return JSON.stringify(
     [...logs]
       .map((log) => ({
+        projectId: log.projectId,
         jobId: log.jobId,
         employeeId: log.employeeId,
         date: log.date,
@@ -169,23 +172,22 @@ function contextFor(store: Store): StoreContext {
 export async function openStore(directory: string, scope: string): Promise<Store> {
   await mkdir(directory, { recursive: true, mode: 0o700 });
   const hash = createHash("sha256").update(scope).digest("hex").slice(0, 32);
-  const path = join(directory, `zsync-preferences-${hash}.json`);
-  let mappings: Record<string, string> = {};
-  for (const candidate of [path, join(directory, `zsync-state-${hash}.json`)]) {
-    let text: string;
-    try { text = await readFile(candidate, "utf8"); }
-    catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") continue; throw error; }
+  const path = join(directory, `zsync-project-preferences-${hash}.json`);
+  let projectMappings: Record<string, string> = {};
+  let text: string;
+  try { text = await readFile(path, "utf8"); }
+  catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; text = ""; }
+  if (text) {
     let data: any;
-    try { data = JSON.parse(text); } catch { throw new Error(`Invalid job preferences at ${candidate}`); }
-    if (data.scope !== scope || !isRecord(data.mappings) || Object.values(data.mappings).some(v => typeof v !== "string" || !v))
-      throw new Error(`Invalid job preferences at ${candidate}`);
-    mappings = { ...data.mappings };
-    break;
+    try { data = JSON.parse(text); } catch { throw new Error(`Invalid project preferences at ${path}`); }
+    if (data.scope !== scope || !isRecord(data.projectMappings) || Object.values(data.projectMappings).some(v => typeof v !== "string" || !v))
+      throw new Error(`Invalid project preferences at ${path}`);
+    projectMappings = { ...data.projectMappings };
   }
   const context = { scope, closed: false };
   const store: Store = {
-    mappings,
-    saveMappings: async () => { contextFor(store); await writeAtomic(path, { scope, mappings: store.mappings }); },
+    projectMappings,
+    saveMappings: async () => { contextFor(store); await writeAtomic(path, { scope, projectMappings: store.projectMappings }); },
     close: async () => { context.closed = true; },
   };
   contexts.set(store, context);

@@ -9,7 +9,7 @@ import { openStore, prepare, commit } from "./sync.ts"
 import { cleanText, dateRange, entryInput, inRange, ranges } from "./dates.ts"
 import type { RangeName } from "./dates.ts"
 import { accountScope } from "./types.ts"
-import type { Entry, Job } from "./types.ts"
+import type { Entry, Job, Project } from "./types.ts"
 
 class Cancelled extends Error {}
 function answer<T>(value: T | symbol): T {
@@ -28,14 +28,24 @@ async function busy<T>(message: string, action: () => Promise<T>): Promise<T> {
 		clearLine(process.stdout, 0)
 	}
 }
-function automaticJob(entry: Entry, jobs: Job[]): string | undefined {
+export const FALLBACK_JOB = "N/A"
+
+export function tagJobName(tags: string[]): string {
+	const names = tags.map(tag => tag.trim()).filter(Boolean)
+	names.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()) || a.localeCompare(b))
+	return names[0] ?? FALLBACK_JOB
+}
+
+export function matchingJob(projectId: string, name: string, jobs: Job[]): Job | undefined {
+	const wanted = name.trim().toLowerCase()
+	return jobs.find(job => job.projectId === projectId && job.name.trim().toLowerCase() === wanted)
+}
+
+function automaticProject(entry: Entry, projects: Project[]): Project | undefined {
 	if (!entry.projectId) return undefined
-	const matches = jobs.filter(
-		job =>
-			job.projectName === entry.projectName ||
-			job.name === entry.projectName,
-	)
-	return matches.length === 1 ? matches[0]!.id : undefined
+	const wanted = entry.projectName.trim().toLowerCase()
+	const matches = projects.filter(project => project.name.trim().toLowerCase() === wanted)
+	return matches.length === 1 ? matches[0] : undefined
 }
 
 export async function main(argv = process.argv.slice(2)): Promise<void> {
@@ -101,21 +111,28 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
         }
 		const scope = accountScope(config)
 		store = await openStore(config.stateDir, scope)
-		const jobs = await busy("Fetching Zoho People jobs", () =>
+		const projects = await busy("Fetching Zoho People projects", () =>
+			zoho.listProjects(),
+		)
+		let jobs = await busy("Fetching Zoho People jobs", () =>
 			zoho.listJobs(),
 		)
+		const projectFor = (entry: Entry) => {
+			if (!entry.projectId) return undefined
+			const saved = store!.projectMappings[entry.projectId]
+			return projects.find(project => project.id === saved) ?? automaticProject(entry, projects)
+		}
 		const jobFor = (entry: Entry) => {
-			const saved = store!.mappings[entry.projectId ?? "(no project)"]
-			return jobs.some(job => job.id === saved)
-				? saved
-				: automaticJob(entry, jobs)
+			const project = projectFor(entry)
+			return project ? matchingJob(project.id, tagJobName(entry.tags), jobs) : undefined
 		}
 		const makeInputs = (items: Entry[]) =>
 			items.map(entry => ({
 				key: entry.id,
 				input: entryInput(
 					entry,
-					jobFor(entry) ?? "__unmapped__",
+					projectFor(entry)?.id ?? "__unmapped__",
+					jobFor(entry)?.id ?? "__unmapped__",
 					config.zohoEmployeeId,
 					config.timezone,
                     { workspaceId: config.clockifyWorkspaceId, userId: config.clockifyUserId },
@@ -138,15 +155,19 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
 								: item.status === "skip"
 									? "synced"
 									: item.status === "update"
-										? "changed"
-										: "conflict",
-						reason:
-							item.reason ??
-							(!jobFor(entry)
-								? "Choose a Zoho job after selection"
-								: undefined),
-					}
-				}), ...deletions.map(({ log, entryId }) => ({
+									? "changed"
+									: "conflict",
+							reason:
+								item.reason ??
+								(!entry.projectId
+									? "Assign a Clockify project before syncing"
+									: !projectFor(entry)
+										? "Choose a Zoho project after selection"
+										: !jobFor(entry)
+											? `Creates Zoho job \"${tagJobName(entry.tags)}\" after confirmation`
+											: undefined),
+						}
+					}), ...deletions.map(({ log, entryId }) => ({
                     entry: { id: `delete:${log.id}`, projectId: null,
                         projectName: jobs.find(job => job.id === log.jobId)?.projectName || jobs.find(job => job.id === log.jobId)?.name || `Job ${log.jobId}`,
                         tags: [], description: log.workItem || entryId, start: '', end: '', billable: log.billable },
@@ -163,25 +184,28 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
 			p.outro("Nothing selected. No Zoho changes.")
 			return
 		}
-		if (selected.length && !jobs.length) throw new Error("No eligible Zoho jobs. Ask your People administrator to assign a job first.")
-		for (const entry of selected) {
-			const key = entry.projectId ?? "(no project)"
-			if (!jobFor(entry)) {
-				store.mappings[key] = answer(
-					await p.select({
-						message: `Zoho job for ${cleanText(entry.projectName || "entries without a project")}?`,
-						options: jobs.map(job => ({
-							value: job.id,
-							label: cleanText(
-								`${job.projectName ? job.projectName + " / " : ""}${job.name}`,
-							),
-							hint: job.id,
-						})),
-					}),
-				)
-			} else store.mappings[key] = jobFor(entry)!
+		if (selected.length) {
+			if (!projects.length) throw new Error("No eligible Zoho projects. Ask your People administrator to create or assign a project first.")
+			for (const entry of selected) {
+				if (!entry.projectId) throw new Error(`Clockify entry ${entry.id} has no project. Assign it in Clockify before syncing.`)
+				const project = projectFor(entry)
+				if (!project) {
+					store.projectMappings[entry.projectId] = answer(
+						await p.select({
+							message: `Zoho project for ${cleanText(entry.projectName)}?`,
+							options: projects.map(project => ({ value: project.id, label: cleanText(project.name), hint: project.id })),
+						}),
+					)
+				} else store.projectMappings[entry.projectId] = project.id
+			}
 		}
 		await store.saveMappings()
+		const jobsToCreate = new Map<string, { name: string; projectId: string }>()
+		for (const entry of selected) {
+			const project = projectFor(entry)!
+			const name = tagJobName(entry.tags)
+			if (!matchingJob(project.id, name, jobs)) jobsToCreate.set(`${project.id}\0${name.toLowerCase()}`, { name, projectId: project.id })
+		}
 		const plan = await busy("Preparing commit", () =>
 			prepare(store!, zoho, makeInputs(selected)),
 		)
@@ -197,7 +221,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
 		}
 		const confirmed = answer(
 			await p.select({
-				message: `Create ${plan.filter(item => item.status === "create").length}, update ${plan.filter(item => item.status === "update").length}, delete ${selectedDeletions.length} Zoho entries?`,
+				message: `Create ${plan.filter(item => item.status === "create").length}, update ${plan.filter(item => item.status === "update").length}, create ${jobsToCreate.size} Zoho jobs, delete ${selectedDeletions.length} entries?`,
 				initialValue: selectedDeletions.length === 0,
 				options: [
 					{ value: true, label: "Yes" },
@@ -208,6 +232,28 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
 		if (!confirmed) {
 			p.outro("Cancelled. No Zoho changes.")
 			return
+		}
+		if (jobsToCreate.size) {
+			await busy("Creating Zoho jobs", async () => {
+				for (const request of jobsToCreate.values()) {
+					const existing = matchingJob(request.projectId, request.name, jobs)
+					if (existing) continue
+					jobs.push(await zoho.createJob(request.name, request.projectId))
+				}
+			})
+		}
+		const finalPlan = await busy("Preparing commit", () =>
+			prepare(store!, zoho, makeInputs(selected)),
+		)
+		const finalConflicts = finalPlan.filter(item => item.status === "conflict")
+		if (finalConflicts.length) {
+			for (const item of finalConflicts)
+				p.log.error(
+					`${item.key}: ${cleanText(item.reason ?? "Needs reconciliation")}`,
+				)
+			throw new Error(
+				"Resolve the conflicts or rerun. No selected logs were written.",
+			)
 		}
 		const fresh = await busy("Rechecking Clockify entries", () =>
 			clockify.listEntries(range.start, range.end),
@@ -220,7 +266,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
 				)
 		}
 		const results: { key: string; status: string; message?: string }[] = await busy("Syncing selected entries", () =>
-			commit(store!, zoho, plan),
+			commit(store!, zoho, finalPlan),
 		)
         for (const item of selectedDeletions) {
             try {

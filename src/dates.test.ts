@@ -16,9 +16,9 @@ test('yesterday handles a 23-hour daylight-saving day', () => {
 test('whole midnight-crossing entry has one stable day; precision is explicit', () => {
   const entry: Entry = { id: '1', projectId: null, projectName: '-', tags: [], description: 'work',
     start: '2026-09-10T18:00:00Z', end: '2026-09-10T19:00:31Z', billable: false };
-  expect(entryInput(entry, 'job', 'user', 'Asia/Kolkata')).toMatchObject({ date: '2026-09-10', minutes: 61 });
+  expect(entryInput(entry, 'project', 'job', 'user', 'Asia/Kolkata')).toMatchObject({ date: '2026-09-10', minutes: 61 });
   expect(inRange(entry, dateRange('today', 'Asia/Kolkata', '2026-09-11T12:00:00Z'))).toBe(false);
-  expect(() => entryInput({ ...entry, end: entry.start }, 'job', 'user', 'UTC')).toThrow();
+  expect(() => entryInput({ ...entry, end: entry.start }, 'project', 'job', 'user', 'UTC')).toThrow();
   expect(cleanText('\x1b[31mred\ntext')).toBe('red text');
 });
 test('midnight, month rollover, and fall daylight-saving boundary', () => {
@@ -32,7 +32,7 @@ test('midnight, month rollover, and fall daylight-saving boundary', () => {
 test('entry title becomes work item and description contains deterministic source metadata', () => {
   const entry: Entry = { id: 'source-id', projectId: 'project-id', projectName: 'Project', tags: ['call/meet'],
     description: 'Weekly meeting', start: '2026-09-11T10:00:00Z', end: '2026-09-11T11:00:46Z', billable: true };
-  const value = entryInput(entry, 'job', 'employee', 'UTC');
+  const value = entryInput(entry, 'project', 'job', 'employee', 'UTC');
   expect(value.workItem).toBe(entry.description);
   expect(value.description).toBe(`source: Clockify
 entryId: "source-id"
@@ -43,8 +43,8 @@ tags: ["call/meet"]
 start: "2026-09-11T10:00:00Z"
 end: "2026-09-11T11:00:46Z"
 billable: true`);
-  const unusual = entryInput({ ...entry, projectName: 'Name: \"quoted\"\nnext', tags: ['a\nb', '#tag'] }, 'job', 'employee', 'UTC');
+  const unusual = entryInput({ ...entry, projectName: 'Name: \"quoted\"\nnext', tags: ['a\nb', '#tag'] }, 'project', 'job', 'employee', 'UTC');
   expect(unusual.description.split('\n')).toHaveLength(9);
   expect(unusual.description).toContain(`  name: ${JSON.stringify('Name: \"quoted\"\nnext')}`);
-  expect(entryInput(entry, 'job', 'employee', 'UTC')).toEqual(value);
+  expect(entryInput(entry, 'project', 'job', 'employee', 'UTC')).toEqual(value);
 });
