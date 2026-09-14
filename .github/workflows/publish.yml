@@ -22,10 +22,7 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run typecheck
       - run: bun test
-      - name: Set release version
-        run: |
-          bun -e 'const p = await Bun.file("package.json").json(); const [major, minor, patch] = p.version.split(".").map(Number); p.version = `${major}.${minor}.${patch + Number(process.env.GITHUB_RUN_NUMBER)}`; await Bun.write("package.json", JSON.stringify(p, null, 2) + "\n");'
       - name: Publish to npm
-        run: bun publish --access public --tolerate-republish
+        run: bun publish --access public
         env:
           NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
