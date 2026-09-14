@@ -1,43 +1,43 @@
 {
-  "name": "@srafis/zsync",
-  "type": "module",
-  "devDependencies": {
-    "@types/bun": "latest",
-    "@types/node": "^22.20.2",
-    "typescript": "^7.0.2"
-  },
-  "dependencies": {
-    "@clack/core": "1.5.0",
-    "@clack/prompts": "^1.8.0",
-    "@js-temporal/polyfill": "^0.5.1",
-    "fast-string-width": "3.0.2"
-  },
-  "version": "0.1.0",
-  "description": "Interactively sync Clockify entries to Zoho People",
-  "bin": {
-    "zsync": "dist/zsync.js"
-  },
-  "files": [
-    "dist/zsync.js",
-    "README.md",
-    "docs"
-  ],
-  "engines": {
-    "node": ">=22"
-  },
-  "scripts": {
-    "dev": "bun app.ts",
-    "build": "bun build app.ts --target=node --outfile=dist/zsync.js",
-    "test": "bun test",
-    "typecheck": "tsc --noEmit",
-    "prepack": "bun run build"
-  },
-  "publishConfig": {
-    "access": "public",
-    "registry": "https://registry.npmjs.org/"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/srafis/zoho-clockify-sync.git"
-  }
+	"name": "@srafis/zsync",
+	"type": "module",
+	"devDependencies": {
+		"@types/bun": "latest",
+		"@types/node": "^22.20.2",
+		"typescript": "^7.0.2"
+	},
+	"dependencies": {
+		"@clack/core": "1.5.0",
+		"@clack/prompts": "^1.8.0",
+		"@js-temporal/polyfill": "^0.5.1",
+		"fast-string-width": "3.0.2"
+	},
+	"version": "0.1.8",
+	"description": "Interactively sync Clockify entries to Zoho People",
+	"bin": {
+		"zsync": "dist/zsync.js"
+	},
+	"files": [
+		"dist/zsync.js",
+		"README.md",
+		"docs"
+	],
+	"engines": {
+		"node": ">=22"
+	},
+	"scripts": {
+		"dev": "bun app.ts",
+		"build": "bun build app.ts --target=node --outfile=dist/zsync.js",
+		"test": "bun test",
+		"typecheck": "tsc --noEmit",
+		"prepack": "bun run build"
+	},
+	"publishConfig": {
+		"access": "public",
+		"registry": "https://registry.npmjs.org/"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/srafis/zoho-clockify-sync.git"
+	}
 }
