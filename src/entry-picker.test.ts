@@ -27,20 +27,20 @@ test('table fits terminal cells at narrow and wide widths without a status colum
 
 test('changed entries are labelled in both picker and confirmation tables', () => {
   const table = entryTable([{ ...row, status: 'changed' }, row], 110);
-  expect(table.labels[0]).toContain('[updated]');
-  expect(table.labels[1]).not.toContain('[updated]');
+  expect(table.labels[0]).toContain('[U]');
+  expect(table.labels[1]).not.toContain('[U]');
 });
 
 test('combined table distinguishes updates and deletions without an extra column', () => {
   const table = entryTable([row, { ...row, status: 'changed' }, { ...row, status: 'deleted' }], 110);
-  expect(table.labels[0]).not.toContain('[deleted]');
-  expect(table.labels[1]).toContain('[updated]');
-  expect(table.labels[2]).toContain('[deleted]');
+  expect(table.labels[0]).not.toContain('[D]');
+  expect(table.labels[1]).toContain('[U]');
+  expect(table.labels[2]).toContain('[D]');
   expect(table.header).not.toContain('Status');
 });
 
 test('status styling preserves text and terminal width', () => {
-  const label = '01:00 │ [updated] Meeting │ [deleted] Old entry';
+  const label = '01:00 │ [U] Meeting │ [D] Old entry';
   for (const dim of [true, false]) {
     const styled = colorEntryLabel(label, dim);
     expect(styled.replace(/\x1b\[[0-9;]*m/g, '')).toBe(label);

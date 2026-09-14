@@ -129,7 +129,7 @@ Use the prompts in this order:
 5. Review the create, update, job creation, and delete counts.
 6. Choose Yes to write the changes.
 
-New, changed, and deleted entries start selected. Unchanged entries that zsync already synced are not selected. Changed entries show `[updated]` before the description. Deleted entries show `[deleted]`.
+New, changed, and deleted entries start selected. Unchanged entries that zsync already synced are not selected. Changed entries show `[U]` before the description. Deleted entries show `[D]`.
 
 The final prompt defaults to Yes when it only creates or updates entries. It defaults to No when it includes a deletion. zsync makes no Zoho changes before this final confirmation. It may save project mappings before you confirm.
 
@@ -157,13 +157,13 @@ An entry belongs to the local date of its start time. If an entry crosses midnig
 
 zsync writes readable source metadata and a marker such as `[zsync-source:...]` in each Zoho log description. It uses this data to find the log that belongs to a Clockify entry. Keep the metadata and marker in the description. All Clockify tags remain in the metadata even when only one tag selects the Zoho job.
 
-If a Clockify entry or its tags changed, select its `[updated]` row. zsync then writes the current Clockify values and selected Zoho project and job to the matching Zoho log. A Zoho log that you entered by hand has no source metadata, so zsync does not treat it as a match. If you delete a synced Zoho log, its Clockify entry appears as new on the next run.
+If a Clockify entry or its tags changed, select its `[U]` row. zsync then writes the current Clockify values and selected Zoho project and job to the matching Zoho log. A Zoho log that you entered by hand has no source metadata, so zsync does not treat it as a match. If you delete a synced Zoho log, its Clockify entry appears as new on the next run.
 
 Before each write, zsync checks both services again. It verifies the result after the write. A run can finish with both successful and failed entries. If a result is uncertain, inspect Zoho People before you retry it.
 
 ## Review deleted entries
 
-Before it shows the selection table, zsync checks synced Zoho logs in the selected date range. If the source entry no longer exists in Clockify, the Zoho log appears with `[deleted]` and is selected by default.
+Before it shows the selection table, zsync checks synced Zoho logs in the selected date range. If the source entry no longer exists in Clockify, the Zoho log appears with `[D]` and is selected by default.
 
 You can clear a deletion to keep the Zoho log. zsync checks each selected deletion and its Clockify source again before it deletes the log. It does not offer an entry that still exists in Clockify, even if the entry moved to another date. It also excludes manual, locked, and ambiguous Zoho logs.
 

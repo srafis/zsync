@@ -29,7 +29,7 @@ export function entryTable(rows: PickerRow[], columns: number) {
   if (columns >= 90) fields.push({ title: 'Date', size: 10, value: row => row.input.date });
   if (columns >= 110) fields.push({ title: 'Tags', size: 14, value: row => row.entry.tags.join('/') || '—' });
   const used = fields.reduce((sum, field) => sum + field.size + 3, 0);
-  fields.push({ title: 'Description', size: Math.max(1, available - used), value: row => `${row.status === 'changed' || row.status === 'deleted' ? `[${row.status === 'changed' ? 'updated' : 'deleted'}] ` : ''}${row.entry.description || '—'}` });
+  fields.push({ title: 'Description', size: Math.max(1, available - used), value: row => `${row.status === 'changed' || row.status === 'deleted' ? `[${row.status === 'changed' ? 'U' : 'D'}] ` : ''}${row.entry.description || '—'}` });
   const line = (cells: string[]) => fitCell(cells.join(' │ '), available).trimEnd();
   return {
     header: line(fields.map(field => fitCell(field.title, field.size))),
@@ -39,9 +39,9 @@ export function entryTable(rows: PickerRow[], columns: number) {
 }
 
 export function colorEntryLabel(label: string, dim = false): string {
-  return label.split(/(\[updated\]|\[deleted\])/).map(part =>
-    part === '[updated]' ? styleText(['bold', 'yellow'], part) :
-    part === '[deleted]' ? styleText(['bold', 'red'], part) :
+  return label.split(/(\[U\]|\[D\])/).map(part =>
+    part === '[U]' ? styleText(['bold', 'yellow'], part) :
+    part === '[D]' ? styleText(['bold', 'red'], part) :
     dim ? styleText('dim', part) : part,
   ).join('');
 }
