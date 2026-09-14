@@ -11,7 +11,7 @@ You need:
 - Node.js 22 or newer
 - An interactive terminal
 - A Clockify account with time entries
-- A Zoho People account with Time Tracker access and at least one assigned job
+- A Zoho People account with Time Tracker access, at least one assigned project, and permission to create and assign jobs
 
 Install the published package:
 
@@ -42,9 +42,10 @@ Before you configure zsync, collect these values:
 - A Clockify API key, user ID, and workspace ID
 - A Zoho client ID and client secret
 - Access to Zoho People Time Tracker
-- A Zoho job assigned to your employee record
+- Zoho projects assigned to your employee record. Matching names help zsync map them automatically.
+- Permission to create and assign jobs in Zoho People
 
-Use the same Clockify user and workspace that own the entries you want to sync. zsync checks both values before it reads your time entries.
+Use the Clockify user and workspace that contain the entries you want to sync. zsync checks both values before it reads your time entries.
 
 ## Configure zsync
 
@@ -70,7 +71,7 @@ Keep these values private. Do not commit them to a repository. The published com
 | `ZOHO_REGION`        | Zoho data center code: `com`, `eu`, `in`, `au`, `cn`, `jp`, `ca`, `sa`, or `uk` | Saved region, otherwise `com`                     |
 | `ZSYNC_TIMEZONE`     | Time zone used for entry dates, such as `Asia/Kolkata`                          | System time zone                                  |
 | `ZOHO_DATE_FORMAT`   | Date format used by your Zoho organization                                      | `yyyy-MM-dd`                                      |
-| `ZSYNC_STATE_DIR`    | Folder for saved authentication and job mappings                                | See [Saved files](#saved-files)                   |
+| `ZSYNC_STATE_DIR`    | Folder for saved authentication and project mappings                            | See [Saved files](#saved-files)                   |
 | `ZOHO_REFRESH_TOKEN` | Use an existing Zoho refresh token                                              | Saved token                                       |
 | `ZOHO_EMPLOYEE_ID`   | Set the Zoho employee record ID, also called `ERECNO`                           | Saved ID, otherwise looked up after authorization |
 
@@ -109,7 +110,7 @@ To authorize again, run:
 zsync --connect
 ```
 
-Reconnecting keeps saved job mappings for the same account.
+Reconnecting keeps saved project mappings for the same account.
 
 ## Sync your time
 
@@ -123,38 +124,40 @@ Use the prompts in this order:
 
 1. Choose Today, Yesterday, This week, Last week, or This month.
 2. Use the arrow keys to move through the entries. Press Space to select or clear an entry. Press Enter to continue. Press Esc to cancel.
-3. Choose a Zoho job for each Clockify project that has no saved match. zsync selects a unique project or job with the same name when it can.
-4. Review the create, update, and delete counts.
-5. Choose Yes to write the changes.
+3. Choose a Zoho project for each Clockify project that has neither a saved mapping nor a unique case-insensitive name match.
+4. zsync uses the alphabetically first Clockify tag as the Zoho job, reusing a case-insensitive match or creating the job under the selected project. Entries without tags use the `N/A` job.
+5. Review the create, update, job creation, and delete counts.
+6. Choose Yes to write the changes.
 
 New, changed, and deleted entries start selected. Unchanged entries that zsync already synced are not selected. Changed entries show `[updated]` before the description. Deleted entries show `[deleted]`.
 
-The final prompt defaults to Yes when it only creates or updates entries. It defaults to No when it includes a deletion. zsync makes no Zoho changes before this final confirmation. It may save job mappings before you confirm.
+The final prompt defaults to Yes when it only creates or updates entries. It defaults to No when it includes a deletion. zsync makes no Zoho changes before this final confirmation. It may save project mappings before you confirm.
 
 Weeks start on Monday. Today, This week, and This month end at the time you start zsync. zsync uses `ZSYNC_TIMEZONE` for local dates.
 
 ## What zsync copies
 
 
-| Clockify data                                                                | Zoho People result                                   |
-| ---------------------------------------------------------------------------- | ---------------------------------------------------- |
-| Description                                                                  | Work Item                                            |
-| Project                                                                      | The Zoho job you select or zsync matches             |
-| Duration                                                                     | Hours, rounded to the nearest minute                 |
-| Start date                                                                   | Work date in your configured time zone               |
-| Billable flag                                                                | Billing status                                       |
-| Entry ID, project, tags, timestamps, billing flag, workspace ID, and user ID | Readable metadata in Description, with a sync marker |
+| Clockify data                                                                | Zoho People result                                                         |
+| ---------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| Description                                                                  | Work Item                                                                  |
+| Project                                                                      | The Zoho project you select or zsync matches                               |
+| Tags                                                                         | A Zoho job under that project; alphabetically first tag, or `N/A` when empty |
+| Duration                                                                     | Hours, rounded to the nearest minute                                       |
+| Start date                                                                   | Work date in your configured time zone                                     |
+| Billable flag                                                                | Billing status                                                             |
+| Entry ID, project, tags, timestamps, billing flag, workspace ID, and user ID | Readable metadata in the Description, with a sync marker                   |
 
 
-Only completed entries are included. zsync creates duration-based logs. It does not create Zoho projects or jobs.
+Only completed entries are included. zsync creates duration-based logs and missing tag jobs. It does not create Zoho projects.
 
 An entry belongs to the local date of its start time. If an entry crosses midnight, zsync copies the full duration to that start date. Entries longer than 24 hours or entries that round to less than one minute must be corrected in Clockify first.
 
 ## Run a sync again
 
-zsync writes readable source metadata and a marker such as `[zsync-source:...]` in each Zoho log description. It uses this data to find the log that belongs to a Clockify entry. Keep the metadata and marker in the description.
+zsync writes readable source metadata and a marker such as `[zsync-source:...]` in each Zoho log description. It uses this data to find the log that belongs to a Clockify entry. Keep the metadata and marker in the description. All Clockify tags remain in the metadata even when only one tag selects the Zoho job.
 
-If a Clockify entry changed, select its `[updated]` row. zsync then writes the current Clockify values to the matching Zoho log. A Zoho log that you entered by hand has no source metadata, so zsync does not treat it as a match. If you delete a synced Zoho log, its Clockify entry appears as new on the next run.
+If a Clockify entry or its tags changed, select its `[updated]` row. zsync then writes the current Clockify values and selected Zoho project and job to the matching Zoho log. A Zoho log that you entered by hand has no source metadata, so zsync does not treat it as a match. If you delete a synced Zoho log, its Clockify entry appears as new on the next run.
 
 Before each write, zsync checks both services again. It verifies the result after the write. A run can finish with both successful and failed entries. If a result is uncertain, inspect Zoho People before you retry it.
 
@@ -175,13 +178,13 @@ zsync applies creates and updates before deletions. A failed operation does not 
 - If you move a synced entry outside the selected date range, include the old Zoho log date in a later run when you clean it up.
 - Run one sync at a time. zsync does not coordinate runs from different terminals or machines.
 - zsync uses `api.clockify.me`. Clockify regional API endpoints are not supported.
-- Zoho attendance rules, date rules, and job permissions can reject a write.
+- Zoho attendance rules, date rules, project assignments, and job permissions can reject a write.
 
 
 
 ## Saved files
 
-zsync stores authentication and job mappings on your computer. It stores them per account.
+zsync stores authentication and project mappings on your computer. It stores them per account.
 
 
 | System  | Default folder                                    |
@@ -197,7 +200,8 @@ The authentication file contains a refresh token and employee record ID. zsync c
 
 - `Missing required environment variable`: set all five required variables in the current terminal.
 - `Clockify API key does not belong to CLOCKIFY_USER_ID`: use the user ID that belongs to the API key.
-- `No eligible Zoho jobs`: ask your Zoho People administrator to assign an active job to your employee record.
+- `No eligible Zoho projects`: ask your Zoho People administrator to create or assign an active project.
+- Job creation errors: ask your Zoho People administrator for permission to create and assign jobs.
 - `Port 8765 may be in use`: stop the other local process and run zsync again.
 - `Zoho authorization expired or was revoked`: run `zsync --connect`.
 
