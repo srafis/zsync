@@ -19,7 +19,8 @@
   },
   "files": [
     "dist/zsync.js",
-    "README.md"
+    "README.md",
+    "docs"
   ],
   "engines": {
     "node": ">=22"

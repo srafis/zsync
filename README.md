@@ -1,43 +1,54 @@
 # zsync
 
-Keep tracking time in Clockify and sync your entries to Zoho People when you're ready.
+Copy selected Clockify time entries to Zoho People.
 
-zsync is a terminal app for people who want to keep using their personal Clockify workspace while maintaining their work timesheet in Zoho. It offers another way to log time alongside the Zoho Chrome extension: use the Clockify interface you already know, then choose which completed entries to copy across.
+zsync runs in an interactive terminal. It reads completed entries for one Clockify user and workspace. You choose the entries to create or update in Zoho People. It can also find entries deleted from Clockify and offer the related Zoho logs for deletion. It runs only when you start it.
 
-Each run lets you select a period, pick new, changed or deleted entries, map Clockify projects to Zoho jobs, and confirm the sync. Nothing runs in the background.
+## Install
 
-## Get started
+You need:
 
-You need Bun, an interactive terminal, a Clockify account, and access to Zoho People's time tracker with an assigned job.
+- Node.js 22 or newer
+- An interactive terminal
+- A Clockify account with time entries
+- A Zoho People account with Time Tracker access and at least one assigned job
 
-From this repository:
+Install the published package:
 
 ```sh
-bun install
-bun run dev --demo
+npm i -g @srafis/zsync
 ```
 
-The demo uses fictional entries and makes no network requests. It lets you try the selection and confirmation flow before connecting your accounts.
+Check the installation:
 
-## Connect your accounts
-
-### 1. Configure Clockify
-
-Use the API key for your own Clockify account, along with your user ID and the workspace ID you want to sync. The configured user must match the account that owns the API key. zsync syncs that user's entries only.
-
-### 2. Configure Zoho
-
-Create a server-based OAuth client for your Zoho data center and register this redirect URI exactly:
-
-```text
-http://localhost:8765/callback
+```sh
+zsync --help
 ```
 
-You need the client's ID and secret. Your Zoho role must allow Time Tracker API access, and you need an eligible, assigned job to receive entries.
+To try zsync without credentials, run:
 
-### 3. Set your credentials
+```sh
+zsync --demo
+```
 
-Export these five variables in your terminal, replacing the placeholders:
+The demo uses fictional entries and sends no requests to Clockify or Zoho People.
+
+## Set up your accounts
+
+Follow the [Clockify setup guide](docs/clockify-setup.md) and the [Zoho People setup guide](docs/zoho-setup.md) to create the required credentials.
+
+Before you configure zsync, collect these values:
+
+- A Clockify API key, user ID, and workspace ID
+- A Zoho client ID and client secret
+- Access to Zoho People Time Tracker
+- A Zoho job assigned to your employee record
+
+Use the same Clockify user and workspace that own the entries you want to sync. zsync checks both values before it reads your time entries.
+
+## Configure zsync
+
+Set the required values in the terminal where you will run zsync:
 
 ```sh
 export CLOCKIFY_API_KEY='your-clockify-api-key'
@@ -47,143 +58,175 @@ export ZOHO_CLIENT_ID='your-zoho-client-id'
 export ZOHO_CLIENT_SECRET='your-zoho-client-secret'
 ```
 
-For local Bun runs, you can also put these values in a project `.env` file. Keep credentials out of version control. The built Node executable expects exported environment variables.
+The example uses a POSIX shell. In PowerShell, set each variable with `$env:NAME = 'value'`.
 
-If your Zoho account uses a data center other than `people.zoho.com`, set its region before connecting. For example, for `people.zoho.in`:
+Keep these values private. Do not commit them to a repository. The published command reads environment variables from its process. It does not read a project `.env` file.
+
+### Optional variables
+
+
+| Variable             | Use                                                                             | Default                                           |
+| -------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------- |
+| `ZOHO_REGION`        | Zoho data center code: `com`, `eu`, `in`, `au`, `cn`, `jp`, `ca`, `sa`, or `uk` | Saved region, otherwise `com`                     |
+| `ZSYNC_TIMEZONE`     | Time zone used for entry dates, such as `Asia/Kolkata`                          | System time zone                                  |
+| `ZOHO_DATE_FORMAT`   | Date format used by your Zoho organization                                      | `yyyy-MM-dd`                                      |
+| `ZSYNC_STATE_DIR`    | Folder for saved authentication and job mappings                                | See [Saved files](#saved-files)                   |
+| `ZOHO_REFRESH_TOKEN` | Use an existing Zoho refresh token                                              | Saved token                                       |
+| `ZOHO_EMPLOYEE_ID`   | Set the Zoho employee record ID, also called `ERECNO`                           | Saved ID, otherwise looked up after authorization |
+
+
+Supported values for `ZOHO_DATE_FORMAT` are `yyyy-MM-dd`, `dd-MM-yyyy`, `MM-dd-yyyy`, `yyyy/MM/dd`, `dd/MM/yyyy`, and `MM/dd/yyyy`.
+
+Set `ZOHO_REGION` for a non-US Zoho data center. For example:
 
 ```sh
 export ZOHO_REGION='in'
 ```
 
-### 4. Authorize Zoho
+
+
+## Authorize Zoho People
+
+Run zsync after you set the required variables:
 
 ```sh
-bun run dev
+zsync
 ```
 
-On the first run, zsync opens your browser for Zoho authorization. It uses a temporary local listener on port 8765, which must be available. Authorization expires after five minutes if you don't finish it.
+On the first run, zsync:
 
-zsync requests these scopes:
+1. Opens your browser for Zoho authorization.
+2. Waits for Zoho to send the result to `http://localhost:8765/callback`.
+3. Finds your Zoho People employee record from your email address.
+4. Asks for your numeric employee record ID, `ERECNO`, if the lookup fails.
+5. Saves the refresh token and employee record ID for later runs.
 
-- `ZOHOPEOPLE.timetracker.ALL`
-- `ZOHOPEOPLE.forms.READ`
-- `AaaServer.profile.READ`
+If the browser does not open, copy the URL shown in the terminal and open it yourself. Port 8765 must be free. The authorization step times out after five minutes.
 
-After authorization, it looks up your People employee record using your email. If that lookup is unavailable, it asks for your numeric employee record ID, `ERECNO`. This is different from your displayed employee number.
-
-The refresh token and employee record ID are saved locally for later runs. To authorize again:
+To authorize again, run:
 
 ```sh
-bun run dev --connect
+zsync --connect
 ```
 
-Reconnecting preserves your saved job mappings.
+Reconnecting keeps saved job mappings for the same account.
 
 ## Sync your time
 
-Track time in Clockify as usual, stop any timers you want to sync, then run:
+Track time in Clockify and stop any timers you want to sync. Then run:
+
+```sh
+zsync
+```
+
+Use the prompts in this order:
+
+1. Choose Today, Yesterday, This week, Last week, or This month.
+2. Use the arrow keys to move through the entries. Press Space to select or clear an entry. Press Enter to continue. Press Esc to cancel.
+3. Choose a Zoho job for each Clockify project that has no saved match. zsync selects a unique project or job with the same name when it can.
+4. Review the create, update, and delete counts.
+5. Choose Yes to write the changes.
+
+New, changed, and deleted entries start selected. Unchanged entries that zsync already synced are not selected. Changed entries show `[updated]` before the description. Deleted entries show `[deleted]`.
+
+The final prompt defaults to Yes when it only creates or updates entries. It defaults to No when it includes a deletion. zsync makes no Zoho changes before this final confirmation. It may save job mappings before you confirm.
+
+Weeks start on Monday. Today, This week, and This month end at the time you start zsync. zsync uses `ZSYNC_TIMEZONE` for local dates.
+
+## What zsync copies
+
+
+| Clockify data                                                                | Zoho People result                                   |
+| ---------------------------------------------------------------------------- | ---------------------------------------------------- |
+| Description                                                                  | Work Item                                            |
+| Project                                                                      | The Zoho job you select or zsync matches             |
+| Duration                                                                     | Hours, rounded to the nearest minute                 |
+| Start date                                                                   | Work date in your configured time zone               |
+| Billable flag                                                                | Billing status                                       |
+| Entry ID, project, tags, timestamps, billing flag, workspace ID, and user ID | Readable metadata in Description, with a sync marker |
+
+
+Only completed entries are included. zsync creates duration-based logs. It does not create Zoho projects or jobs.
+
+An entry belongs to the local date of its start time. If an entry crosses midnight, zsync copies the full duration to that start date. Entries longer than 24 hours or entries that round to less than one minute must be corrected in Clockify first.
+
+## Run a sync again
+
+zsync writes readable source metadata and a marker such as `[zsync-source:...]` in each Zoho log description. It uses this data to find the log that belongs to a Clockify entry. Keep the metadata and marker in the description.
+
+If a Clockify entry changed, select its `[updated]` row. zsync then writes the current Clockify values to the matching Zoho log. A Zoho log that you entered by hand has no source metadata, so zsync does not treat it as a match. If you delete a synced Zoho log, its Clockify entry appears as new on the next run.
+
+Before each write, zsync checks both services again. It verifies the result after the write. A run can finish with both successful and failed entries. If a result is uncertain, inspect Zoho People before you retry it.
+
+## Review deleted entries
+
+Before it shows the selection table, zsync checks synced Zoho logs in the selected date range. If the source entry no longer exists in Clockify, the Zoho log appears with `[deleted]` and is selected by default.
+
+You can clear a deletion to keep the Zoho log. zsync checks each selected deletion and its Clockify source again before it deletes the log. It does not offer an entry that still exists in Clockify, even if the entry moved to another date. It also excludes manual, locked, and ambiguous Zoho logs.
+
+An authentication or lookup error stops deletion review. zsync does not count that error as a deletion. Deletion review also runs when the selected period has no completed Clockify entries.
+
+zsync applies creates and updates before deletions. A failed operation does not undo operations that already succeeded.
+
+## Limits and safety
+
+- Sync works from Clockify to Zoho People. It does not copy Zoho edits back to Clockify or submit or approve timesheets.
+- Locked or approved Zoho logs, and multiple Zoho logs for one Clockify entry, are conflicts. Clear those entries or fix the logs before you continue.
+- If you move a synced entry outside the selected date range, include the old Zoho log date in a later run when you clean it up.
+- Run one sync at a time. zsync does not coordinate runs from different terminals or machines.
+- zsync uses `api.clockify.me`. Clockify regional API endpoints are not supported.
+- Zoho attendance rules, date rules, and job permissions can reject a write.
+
+
+
+## Saved files
+
+zsync stores authentication and job mappings on your computer. It stores them per account.
+
+
+| System  | Default folder                                    |
+| ------- | ------------------------------------------------- |
+| Linux   | `$XDG_DATA_HOME/zsync`, or `~/.local/share/zsync` |
+| macOS   | `~/Library/Application Support/zsync`             |
+| Windows | `%APPDATA%/zsync`, with a local AppData fallback  |
+
+
+The authentication file contains a refresh token and employee record ID. zsync creates it with owner-only permissions (`0600`). It does not save the Zoho client secret. Set `ZSYNC_STATE_DIR` to use another folder.
+
+## Troubleshooting
+
+- `Missing required environment variable`: set all five required variables in the current terminal.
+- `Clockify API key does not belong to CLOCKIFY_USER_ID`: use the user ID that belongs to the API key.
+- `No eligible Zoho jobs`: ask your Zoho People administrator to assign an active job to your employee record.
+- `Port 8765 may be in use`: stop the other local process and run zsync again.
+- `Zoho authorization expired or was revoked`: run `zsync --connect`.
+
+
+
+## Development
+
+The published package does not need Bun. Use Bun only when you run the source checkout.
+
+```sh
+git clone https://github.com/srafis/zoho-clockify-sync.git
+cd zoho-clockify-sync
+bun install
+bun run dev --demo
+```
+
+For a real source run, copy `.env.example` to `.env`, fill in the values, and run:
 
 ```sh
 bun run dev
 ```
 
-1. Choose Today, Yesterday, This week, Last week, or This month.
-2. Use the arrow keys to move through entries and Space to select or deselect them. Press Enter to continue.
-3. Choose a Zoho job for each unmapped Clockify project. zsync remembers your choices. An exact, unique match with a Zoho project or job name is selected automatically.
-4. Review the create/update/delete counts and submit the final Yes/No prompt. It defaults to No when deletions are selected, otherwise Yes.
-
-New, changed and deleted entries start selected. Changed rows show a yellow `[updated]` label before their description and update the existing Zoho log when confirmed. Unchanged synced entries start unselected and are skipped if selected.
-
-The final confirmation lists how many Zoho logs will be created, updated and deleted. It defaults to No if any deletions are selected. Cancelling before confirmation makes no Zoho changes. Job mappings may already have been saved locally.
-
-## What gets copied
-
-| Clockify field                                         | Zoho field or behavior                                    |
-| ------------------------------------------------------ | --------------------------------------------------------- |
-| Description                                            | Work Item                                                 |
-| Project                                                | The Zoho job you selected or matched                      |
-| Duration                                               | Hours, rounded to the nearest minute                      |
-| Start date                                             | Work date in your configured timezone                     |
-| Billable flag                                          | Billing status                                            |
-| Entry ID, project, tags, start/end times, billing flag | Readable YAML metadata in Description, with a sync marker |
-
-Only completed entries are included. Weeks start on Monday, and current periods end at the time you start the CLI.
-
-Entries belong to their local start date. A timer that crosses midnight is copied whole to that date. Entries longer than 24 hours or shorter than the duration that rounds to one minute must be corrected in Clockify first.
-
-zsync creates duration-based logs. The original start and end timestamps are retained in metadata. It does not create Zoho projects or jobs.
-
-## Running sync again
-
-zsync writes readable YAML metadata in the Zoho log's Description and recognizes entries by a sync marker derived from their Clockify ID. Comparison includes the exact metadata text, excluding the sync marker. Differences in the log fields or metadata appear as updates. Keep that metadata intact so later runs can find the existing log. Recognition works across machines and OAuth clients without a local sync ledger.
-
-Selecting a changed entry overwrites differing Zoho fields with the Clockify values.
-
-A manually entered Zoho log without sync metadata is not treated as a match, even if its title and duration are identical. Deleting a synced Zoho log makes its Clockify entry appear new again.
-
-Before writing, zsync checks for changes in both services. It verifies each write afterward and attempts to reconcile an uncertain response without blindly repeating the write. If an entry remains `uncertain`, inspect it in Zoho before retrying. Failures are reported per entry, and failed or uncertain results produce a nonzero exit status. A run can partially succeed.
-
-## Review deleted entries
-
-Before showing the combined sync table, zsync checks synced Zoho logs dated within your selected period. For each eligible log, it looks up the Clockify entry by ID, regardless of date. A moved entry or running timer that still exists is not offered for deletion. For a Clockify workspace-mismatch response, zsync checks the complete paginated user entry list without date filters. Only confirmed absence becomes a deletion candidate. Authentication errors and other failed lookups stop discovery rather than counting as deletions.
-
-If Clockify confirms an entry is absent, its Zoho log appears in the same checkbox table as new and changed entries, labelled with a red `[deleted]` before its description. Deletion rows start checked. Deselect any logs you want to keep and review the create/update/delete counts at the final confirmation. The app rechecks each selected log and its Clockify source before deleting, then verifies that the Zoho log is gone. Deletions are not retried automatically after an uncertain response.
-
-Logs need Clockify source metadata, an entry ID and a valid sync marker. Explicit workspace/user IDs must match your configuration. Deletion checks use the configured Clockify workspace. Use the same workspace for tracking and syncing. Manual logs and locked logs are excluded.
-
-Deletion review also runs when the selected period has no completed Clockify entries. After confirmation, the app applies creations and updates, then deletions. A failure does not roll back successful operations. A deletion failure is reported per entry and produces a nonzero exit status.
-
-## Limits to know
-
-- Sync runs one way, from Clockify to Zoho. It does not copy Zoho edits back or submit or approve timesheets.
-- Locked or approved logs and multiple Zoho logs identifying the same Clockify entry are conflicts. Resolve them or deselect those entries before continuing.
-- Lookup covers the selected entries' date span. If you move a previously synced entry to a date outside that span, reconcile its old Zoho log before syncing again.
-- Run one sync at a time. There is no protection against simultaneous runs across terminals or machines.
-- Clockify regional API endpoints are not supported. The app uses `api.clockify.me`.
-- Zoho attendance, leave, date restrictions, and job permissions still apply and may cause a write to be rejected.
-
-For your first real sync, select a few entries and check the resulting logs in Zoho.
-
-## Optional configuration
-
-| Variable             | Purpose                                                                    | Default                           |
-| -------------------- | -------------------------------------------------------------------------- | --------------------------------- |
-| `ZOHO_REGION`        | Zoho data center: `com`, `eu`, `in`, `au`, `cn`, `jp`, `ca`, `sa`, or `uk` | Saved region, otherwise `com`     |
-| `ZSYNC_TIMEZONE`     | IANA timezone, such as `Asia/Kolkata`                                      | System timezone                   |
-| `ZOHO_DATE_FORMAT`   | Date format used by your Zoho organization                                 | `yyyy-MM-dd`                      |
-| `ZSYNC_STATE_DIR`    | Directory for saved authentication and job mappings                        | Platform-specific directory below |
-| `ZOHO_REFRESH_TOKEN` | Override the saved refresh token                                           | Saved token                       |
-| `ZOHO_EMPLOYEE_ID`   | Override the saved employee record ID, `ERECNO`                            | Saved employee ID                 |
-
-Supported date formats are `yyyy-MM-dd`, `dd-MM-yyyy`, `MM-dd-yyyy`, `yyyy/MM/dd`, `dd/MM/yyyy`, and `MM/dd/yyyy`.
-
-Authentication and job preferences are stored per account. The authentication file contains a refresh token and is created with owner-only file permissions, `0600`. Client secrets are not saved by zsync.
-
-Default storage locations:
-
-- Linux: `$XDG_DATA_HOME/zsync`, or `~/.local/share/zsync`
-- macOS: `~/Library/Application Support/zsync`
-- Windows: `%APPDATA%/zsync`, with a local AppData fallback
-
-## Development
-
-Use Bun for dependency installation, development, and checks:
+Run the checks with:
 
 ```sh
-bun install
-bun run dev --help
 bun run typecheck
 bun test
 bun run build
 bun pm pack
 ```
 
-The build produces `dist/zsync.js`, a Node 22+ executable exposed as `zsync` by the `@srafis/zsync` package. Bun is used for development; the built executable can run without it.
-
-Tests use fictional API responses and do not create real time logs.
-
-### Publishing
-
-The GitHub Actions workflow in `.github/workflows/publish.yml` tests, builds, and publishes the package on pushes to `main`. Configure the repository's `NPM_TOKEN` Actions secret with permission to publish `@srafis/zsync` and bypass 2FA for CI.
-
-CI adds the workflow run number to the patch version in `package.json`. It does not commit that version change. Republishing the same version is tolerated. Change the major or minor version in `package.json` when needed.
+The build creates `dist/zsync.js`, a Node.js 22 or newer executable. Tests use fictional API responses and do not create real time logs.
