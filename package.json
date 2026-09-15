@@ -12,7 +12,7 @@
 		"@js-temporal/polyfill": "^0.5.1",
 		"fast-string-width": "3.0.2"
 	},
-	"version": "0.1.17",
+	"version": "0.1.18",
 	"description": "Interactively sync Clockify entries to Zoho People",
 	"bin": {
 		"zsync": "dist/zsync.js"
