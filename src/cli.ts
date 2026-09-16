@@ -10,6 +10,7 @@ import { cleanText, dateRange, entryInput, inRange, ranges } from "./dates.ts"
 import type { RangeName } from "./dates.ts"
 import { accountScope } from "./types.ts"
 import type { Entry, Job, Project } from "./types.ts"
+import { version } from "../package.json"
 
 class Cancelled extends Error {}
 function answer<T>(value: T | symbol): T {
@@ -80,7 +81,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
 		return
 	}
 	if (argv.includes("--version")) {
-		console.log("0.1.0")
+		console.log(version)
 		return
 	}
 	if (argv.some(arg => arg !== "--demo" && arg !== "--connect"))
