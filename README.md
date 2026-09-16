@@ -11,7 +11,7 @@ You need:
 - Node.js 22 or newer
 - An interactive terminal
 - A Clockify account with time entries
-- A Zoho People account with Time Tracker access, at least one assigned project, and permission to create and assign jobs
+- A Zoho People account with Time Tracker access, an assigned project or permission to create projects, and permission to create and assign jobs
 
 Install the published package:
 
@@ -42,7 +42,7 @@ Before you configure zsync, collect these values:
 - A Clockify API key, user ID, and workspace ID
 - A Zoho client ID and client secret
 - Access to Zoho People Time Tracker
-- Zoho projects assigned to your employee record. Matching names help zsync map them automatically.
+- Zoho projects assigned to your employee record, or permission to create them. Matching names help zsync map them automatically.
 - Permission to create and assign jobs in Zoho People
 
 Use the Clockify user and workspace that contain the entries you want to sync. zsync checks both values before it reads your time entries.
@@ -124,14 +124,14 @@ Use the prompts in this order:
 
 1. Choose Today, Yesterday, This week, Last week, or This month.
 2. Use the arrow keys to move through the entries. Press Space to select or clear an entry. Press Enter to continue. Press Esc to cancel.
-3. Choose a Zoho project for each Clockify project that has neither a saved mapping nor a unique case-insensitive name match.
+3. Choose a Zoho project for each Clockify project that has neither a saved mapping nor a unique case-insensitive name match. The first option, `Create "<Clockify project name>"`, immediately creates a project with your configured Zoho employee as project head and saves the mapping.
 4. zsync uses the alphabetically first Clockify tag as the Zoho job, reusing a case-insensitive match or creating the job under the selected project. Entries without tags use the `N/A` job.
 5. Review the create, update, job creation, and delete counts.
 6. Choose Yes to write the changes.
 
 New, changed, and deleted entries start selected. Unchanged entries that zsync already synced are not selected. Changed entries show `[U]` before the description. Deleted entries show `[D]`.
 
-The final prompt defaults to Yes when it only creates or updates entries. It defaults to No when it includes a deletion. zsync makes no Zoho changes before this final confirmation. It may save project mappings before you confirm.
+The final prompt defaults to Yes when it only creates or updates entries. It defaults to No when it includes a deletion. Jobs and time logs are written only after this confirmation. Projects explicitly created during mapping are kept even if you cancel later. Project mappings are saved before you confirm.
 
 Weeks start on Monday. Today, This week, and This month end at the time you start zsync. zsync uses `ZSYNC_TIMEZONE` for local dates.
 
@@ -149,7 +149,7 @@ Weeks start on Monday. Today, This week, and This month end at the time you star
 | Entry ID, project, tags, timestamps, billing flag, workspace ID, and user ID | Readable metadata in the Description, with a sync marker                   |
 
 
-Only completed entries are included. zsync creates duration-based logs and missing tag jobs. It does not create Zoho projects.
+Only completed entries are included. zsync creates duration-based logs and missing tag jobs. You can also create missing Zoho projects from the project picker.
 
 An entry belongs to the local date of its start time. If an entry crosses midnight, zsync copies the full duration to that start date. Entries longer than 24 hours or entries that round to less than one minute must be corrected in Clockify first.
 
@@ -200,7 +200,7 @@ The authentication file contains a refresh token and employee record ID. zsync c
 
 - `Missing required environment variable`: set all five required variables in the current terminal.
 - `Clockify API key does not belong to CLOCKIFY_USER_ID`: use the user ID that belongs to the API key.
-- `No eligible Zoho projects`: ask your Zoho People administrator to create or assign an active project.
+- If no Zoho projects are available, use the project picker's Create option. If creation is denied, ask your Zoho People administrator for permission or an assigned active project.
 - Job creation errors: ask your Zoho People administrator for permission to create and assign jobs.
 - `Port 8765 may be in use`: stop the other local process and run zsync again.
 - `Zoho authorization expired or was revoked`: run `zsync --connect`.

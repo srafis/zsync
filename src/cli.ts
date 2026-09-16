@@ -48,6 +48,30 @@ function automaticProject(entry: Entry, projects: Project[]): Project | undefine
 	return matches.length === 1 ? matches[0] : undefined
 }
 
+export async function chooseProject(
+	name: string,
+	projects: Project[],
+	create: (name: string) => Promise<Project>,
+	select: (options: { message: string; options: { value: string; label: string; hint?: string }[] }) => Promise<string | symbol> = p.select,
+): Promise<Project> {
+	const createValue = "__create_project__"
+	const choice = answer(await select({
+		message: `Zoho project for ${cleanText(name)}?`,
+		options: [
+			{ value: createValue, label: `Create "${cleanText(name)}"`, hint: "Creates now with you as project head" },
+			...projects.map(project => ({ value: project.id, label: cleanText(project.name), hint: project.id })),
+		],
+	}))
+	if (choice === createValue) {
+		const project = await create(name)
+		projects.push(project)
+		return project
+	}
+	const project = projects.find(project => project.id === choice)
+	if (!project) throw new Error("Selected Zoho project was not found")
+	return project
+}
+
 export async function main(argv = process.argv.slice(2)): Promise<void> {
 	if (argv.includes("--help") || argv.includes("-h")) {
 		console.log(
@@ -75,6 +99,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
 	const clockify = demo?.clockify ?? createClockify(config)
 	const zoho = demo?.zoho ?? createZoho(config)
 	let store: Awaited<ReturnType<typeof openStore>> | undefined
+	let createdProjects = 0
 	try {
 		if (demo)
 			p.log.warn(
@@ -185,17 +210,19 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
 			return
 		}
 		if (selected.length) {
-			if (!projects.length) throw new Error("No eligible Zoho projects. Ask your People administrator to create or assign a project first.")
 			for (const entry of selected) {
 				if (!entry.projectId) throw new Error(`Clockify entry ${entry.id} has no project. Assign it in Clockify before syncing.`)
 				const project = projectFor(entry)
 				if (!project) {
-					store.projectMappings[entry.projectId] = answer(
-						await p.select({
-							message: `Zoho project for ${cleanText(entry.projectName)}?`,
-							options: projects.map(project => ({ value: project.id, label: cleanText(project.name), hint: project.id })),
+					const chosen = await chooseProject(entry.projectName, projects, name =>
+						busy("Creating Zoho project", async () => {
+							const created = await zoho.createProject(name)
+							createdProjects++
+							return created
 						}),
 					)
+					store.projectMappings[entry.projectId] = chosen.id
+					await store.saveMappings()
 				} else store.projectMappings[entry.projectId] = project.id
 			}
 		}
@@ -230,7 +257,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
 			}),
 		)
 		if (!confirmed) {
-			p.outro("Cancelled. No Zoho changes.")
+			p.outro(createdProjects ? "Cancelled. Created Zoho projects are kept; no time logs or jobs were changed." : "Cancelled. No Zoho changes.")
 			return
 		}
 		if (jobsToCreate.size) {

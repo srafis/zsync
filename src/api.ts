@@ -457,7 +457,7 @@ function logFields(input: LogInput, config: Config): Record<string, string> {
   };
 }
 
-export function createZoho(config: Config, options: ApiOptions = {}): Destination & { validate(): Promise<void>; listProjects(): Promise<Project[]>; listJobs(): Promise<Job[]>; createJob(name: string, projectId: string): Promise<Job>; deleteLog(id: string): Promise<void> } {
+export function createZoho(config: Config, options: ApiOptions = {}): Destination & { validate(): Promise<void>; listProjects(): Promise<Project[]>; createProject(name: string): Promise<Project>; listJobs(): Promise<Job[]>; createJob(name: string, projectId: string): Promise<Job>; deleteLog(id: string): Promise<void> } {
   const region = ZOHO_REGIONS[config.zohoRegion.toLowerCase()];
   if (!region) throw new Error(`Unsupported Zoho region ${config.zohoRegion}`);
   const { accounts, people } = region;
@@ -552,6 +552,28 @@ export function createZoho(config: Config, options: ApiOptions = {}): Destinatio
       if (!boolValue(response.isNextAvailable) || response.result.length === 0) return projects;
       index += response.result.length;
     }
+  }
+
+  async function createProject(name: string): Promise<Project> {
+    const projectName = name.trim();
+    if (!projectName) throw new Error("Zoho project requires a name");
+    // Some People insert responses omit pkId. Remember existing IDs so a
+    // follow-up read cannot mistake an older project for the one just created.
+    const existingIds = new Set((await listProjects()).map(project => project.id));
+    const inputData = JSON.stringify({ Project_Name: projectName, ProjectHead: config.zohoEmployeeId });
+    const body = await rateLimit(projectsRate, ZOHO_WRITE_INTERVAL_MS, sleep, () => zohoRequest(
+      "/forms/json/P_TimesheetJobsList/insertRecord",
+      { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: formBody({ inputData }) },
+      true,
+    ));
+    const response = zohoStatus(body, "Zoho create project", secrets, true);
+    const result = Array.isArray(response.result) ? response.result[0] : response.result;
+    if (isRecord(result) && result.pkId !== undefined) {
+      return { id: valueId(result.pkId, "pkId", "Zoho create project"), name: projectName };
+    }
+    const matches = (await listProjects()).filter(project => !existingIds.has(project.id) && project.name === projectName);
+    if (matches.length === 1) return matches[0]!;
+    throw new Error("Zoho accepted project creation but its ID could not be identified. Check Zoho People before trying to create it again.");
   }
 
   async function createJob(name: string, projectId: string): Promise<Job> {
@@ -672,5 +694,5 @@ export function createZoho(config: Config, options: ApiOptions = {}): Destinatio
     });
   }
 
-  return { validate: async () => { await Promise.all([listProjects(), listJobs()]); }, listProjects, listJobs, createJob, listLogs, getLog, createLog, updateLog, deleteLog };
+  return { validate: async () => { await Promise.all([listProjects(), listJobs()]); }, listProjects, createProject, listJobs, createJob, listLogs, getLog, createLog, updateLog, deleteLog };
 }

@@ -1,6 +1,6 @@
 # Set up Zoho People
 
-zsync needs a Zoho OAuth client, Time Tracker API access, an active project assigned to your employee record, and permission to create and assign jobs.
+zsync needs a Zoho OAuth client, Time Tracker API access, an active project assigned to your employee record or permission to create projects, and permission to create and assign jobs.
 
 ## Create an OAuth client
 
@@ -27,12 +27,12 @@ zsync requests these scopes during authorization:
 ZOHOPEOPLE.timetracker.ALL,ZOHOPEOPLE.forms.READ,ZOHOPEOPLE.forms.CREATE,AaaServer.profile.READ
 ```
 
-`ZOHOPEOPLE.timetracker.ALL` lets zsync read and change time logs and list assigned projects and jobs. `ZOHOPEOPLE.forms.CREATE` lets it create missing tag jobs under the selected project. The `ZOHOPEOPLE.forms.READ` and `AaaServer.profile.READ` scopes let it find your employee record from your email address.
+`ZOHOPEOPLE.timetracker.ALL` lets zsync read and change time logs and list assigned projects and jobs. `ZOHOPEOPLE.forms.CREATE` lets it create projects and missing tag jobs under the selected project. The `ZOHOPEOPLE.forms.READ` and `AaaServer.profile.READ` scopes let it find your employee record from your email address.
 
 See Zoho's [OAuth scopes](https://www.zoho.com/people/api/scopes.html) page for scope details.
 
 ## Check your Zoho access
 
-Your Zoho People role must allow Time Tracker API access. Your employee record must have an eligible, assigned project and permission to create and assign jobs. Ask your People administrator if zsync reports that no projects are available or job creation is denied.
+Your Zoho People role must allow Time Tracker API access. Your employee record must have an eligible, assigned project or permission to create projects, plus permission to create and assign jobs. Choosing Create in the project picker creates the project immediately with your configured employee record as project head. Ask your People administrator if project or job creation is denied.
 
 If zsync cannot find your employee record by email, it asks for the numeric `ERECNO`. This is the employee record ID. It is different from the employee number shown in the People interface. You can also set it with `ZOHO_EMPLOYEE_ID`.
