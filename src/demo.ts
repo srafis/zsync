@@ -22,9 +22,10 @@ export async function demoServices() {
     { id: 'demo-meeting-job', name: 'Meeting', projectId: 'demo-zoho-project', projectName: 'Example project' },
     { id: 'demo-na-job', name: 'N/A', projectId: 'demo-zoho-project', projectName: 'Example project' },
   ];
-  const zoho: Destination & { validate(): Promise<void>; listProjects(): Promise<Project[]>; listJobs(): Promise<Job[]>; createJob(name: string, projectId: string): Promise<Job>; deleteLog(id: string): Promise<void> } = {
+  const zoho: Destination & { validate(): Promise<void>; listProjects(): Promise<Project[]>; createProject(name: string): Promise<Project>; listJobs(): Promise<Job[]>; createJob(name: string, projectId: string): Promise<Job>; deleteLog(id: string): Promise<void> } = {
     async deleteLog(id) { logs.delete(id); },
     async validate() {}, async listProjects() { return projects.map(project => ({ ...project })); },
+    async createProject(name) { const project = { id: `demo-zoho-project-${projects.length + 1}`, name: name.trim() }; projects.push(project); return project; },
     async listJobs() { return jobs.map(job => ({ ...job })); },
     async createJob(name, projectId) { const job = { id: `demo-job-${jobs.length + 1}`, name, projectId }; jobs.push(job); return job; },
     async listLogs() { return [...logs.values()].map(log => ({ ...log })); },

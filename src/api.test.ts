@@ -17,6 +17,51 @@ const config: Config = {
 
 const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { "content-type": "application/json" } });
 
+test("creates a Zoho project with the configured employee as project head", async () => {
+  const id = "743028000004478205";
+  const zoho = createZoho(config, { sleep: async () => {}, fetch: async (input, init) => {
+    const url = String(input);
+    if (url.includes("/oauth/v2/token")) return json({ access_token: "access", expires_in: 3600 });
+    if (url.includes("getprojects")) return json({ response: { status: 0, result: [] } });
+    expect(url).toContain("/forms/json/P_TimesheetJobsList/insertRecord");
+    expect(init?.method).toBe("POST");
+    expect(JSON.parse(new URLSearchParams(String(init?.body)).get("inputData")!)).toEqual({ Project_Name: "non-existing-project-1", ProjectHead: "employee" });
+    return json({ response: { status: 0, result: { pkId: id } } });
+  } });
+  expect(await zoho.createProject(" non-existing-project-1 ")).toEqual({ id, name: "non-existing-project-1" });
+});
+
+test("project creation recovers an omitted ID without confusing older projects or retrying writes", async () => {
+  for (const newIds of [["new"], [], ["new", "another"]]) {
+    let writes = 0;
+    const zoho = createZoho(config, { sleep: async () => {}, fetch: async input => {
+      const url = String(input);
+      if (url.includes("/oauth/v2/token")) return json({ access_token: "access", expires_in: 3600 });
+      if (url.includes("getprojects")) return json({ response: { status: 0, result: ["old", ...(writes ? newIds : [])].map(projectId => ({ projectId, projectName: "New" })) } });
+      writes++;
+      return json({ response: { status: 0, result: [{ message: "Successfully Added" }] } });
+    } });
+    if (newIds.length === 1) expect(await zoho.createProject("New")).toEqual({ id: "new", name: "New" });
+    else await expect(zoho.createProject("New")).rejects.toThrow("Check Zoho People");
+    expect(writes).toBe(1);
+  }
+});
+
+test("project creation rejects blank names and surfaces denied writes without retrying", async () => {
+  let writes = 0;
+  const zoho = createZoho(config, { sleep: async () => {}, fetch: async input => {
+    const url = String(input);
+    if (url.includes("/oauth/v2/token")) return json({ access_token: "access", expires_in: 3600 });
+    if (url.includes("getprojects")) return json({ response: { status: 0, result: [] } });
+    writes++;
+    return json({ response: { status: 1, message: "Permission denied" } });
+  } });
+  await expect(zoho.createProject("  ")).rejects.toThrow("requires a name");
+  expect(writes).toBe(0);
+  await expect(zoho.createProject("New")).rejects.toThrow("Permission denied");
+  expect(writes).toBe(1);
+});
+
 describe("configuration", () => {
   test("requires credentials and uses explicit local overrides", () => {
     const env = {
