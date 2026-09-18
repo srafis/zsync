@@ -11,7 +11,7 @@ You need:
 - Node.js 22 or newer
 - An interactive terminal
 - A Clockify account with time entries
-- A Zoho People account with Time Tracker access, an assigned project or permission to create projects, and permission to create and assign jobs
+- A Zoho People account with Time Tracker and Attendance API access, an assigned project or permission to create projects, and permission to create and assign jobs
 
 Install the published package:
 
@@ -112,6 +112,17 @@ zsync --connect
 
 Reconnecting keeps saved project mappings for the same account.
 
+## Check in and out
+
+Use these commands to record the current time in Zoho People attendance:
+
+```sh
+zsync sheron
+zsync sheroff
+```
+
+The commands use `ZSYNC_TIMEZONE` or your system time zone. They require the Zoho attendance permission requested by zsync and the matching Attendance API permission in your Zoho People role. If you used an older zsync authorization, run `zsync --connect` once before using these commands.
+
 ## Sync your time
 
 Track time in Clockify and stop any timers you want to sync. Then run:
@@ -194,7 +205,7 @@ zsync stores authentication and project mappings on your computer. It stores the
 | Windows | `%APPDATA%/zsync`, with a local AppData fallback  |
 
 
-The authentication file contains a refresh token and employee record ID. zsync creates it with owner-only permissions (`0600`). It does not save the Zoho client secret. Set `ZSYNC_STATE_DIR` to use another folder.
+The authentication file contains a refresh token, the authorized Zoho email, employee record ID, and Zoho EmployeeID. zsync creates it with owner-only permissions (`0600`). It does not save the Zoho client secret. Set `ZSYNC_STATE_DIR` to use another folder.
 
 ## Troubleshooting
 

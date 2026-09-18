@@ -1,6 +1,6 @@
 # Set up Zoho People
 
-zsync needs a Zoho OAuth client, Time Tracker API access, an active project assigned to your employee record or permission to create projects, and permission to create and assign jobs.
+zsync needs a Zoho OAuth client, Time Tracker and Attendance API access, an active project assigned to your employee record or permission to create projects, and permission to create and assign jobs.
 
 ## Create an OAuth client
 
@@ -24,15 +24,17 @@ zsync opens a local callback on port 8765 during the first authorization. The re
 zsync requests these scopes during authorization:
 
 ```text
-ZOHOPEOPLE.timetracker.ALL,ZOHOPEOPLE.forms.READ,ZOHOPEOPLE.forms.CREATE,AaaServer.profile.READ
+ZOHOPEOPLE.timetracker.ALL,ZOHOPEOPLE.attendance.ALL,ZOHOPEOPLE.forms.READ,ZOHOPEOPLE.forms.CREATE,AaaServer.profile.READ
 ```
 
-`ZOHOPEOPLE.timetracker.ALL` lets zsync read and change time logs and list assigned projects and jobs. `ZOHOPEOPLE.forms.CREATE` lets it create projects and missing tag jobs under the selected project. The `ZOHOPEOPLE.forms.READ` and `AaaServer.profile.READ` scopes let it find your employee record from your email address.
+`ZOHOPEOPLE.timetracker.ALL` lets zsync read and change time logs and list assigned projects and jobs. `ZOHOPEOPLE.attendance.ALL` lets `zsync sheron` and `zsync sheroff` record attendance through Zoho People’s current Attendance API. `ZOHOPEOPLE.forms.CREATE` lets it create projects and missing tag jobs under the selected project. The `ZOHOPEOPLE.forms.READ` and `AaaServer.profile.READ` scopes let it find your employee record from your email address.
+
+Time Tracker uses the numeric employee record ID (`ERECNO`); Attendance uses the Zoho EmployeeID (the employee number, such as `HRM02`). zsync looks up both from the authorized email and saves them for future runs. The email is also retained for compatibility with older attendance endpoints.
 
 See Zoho's [OAuth scopes](https://www.zoho.com/people/api/scopes.html) page for scope details.
 
 ## Check your Zoho access
 
-Your Zoho People role must allow Time Tracker API access. Your employee record must have an eligible, assigned project or permission to create projects, plus permission to create and assign jobs. Choosing Create in the project picker creates the project immediately with your configured employee record as project head. Ask your People administrator if project or job creation is denied.
+Your Zoho People role must allow Time Tracker API access and Attendance API access. The OAuth scope does not replace the role-level permission. Your employee record must have an eligible, assigned project or permission to create projects, plus permission to create and assign jobs. Choosing Create in the project picker creates the project immediately with your configured employee record as project head. Ask your People administrator if attendance, project, or job creation is denied.
 
 If zsync cannot find your employee record by email, it asks for the numeric `ERECNO`. This is the employee record ID. It is different from the employee number shown in the People interface. You can also set it with `ZOHO_EMPLOYEE_ID`.

@@ -1,6 +1,13 @@
 import { expect, test } from "bun:test";
-import { chooseProject, matchingJob, tagJobName } from "./cli.ts";
+import { attendanceAction, chooseProject, matchingJob, tagJobName } from "./cli.ts";
 import type { Project } from "./types.ts";
+
+test("attendance commands map to the matching Zoho action", () => {
+  expect(attendanceAction(["sheron"])).toBe("checkIn");
+  expect(attendanceAction(["sheroff"])).toBe("checkOut");
+  expect(attendanceAction(["sheron", "--connect"])).toBeUndefined();
+  expect(attendanceAction(["sync"])).toBeUndefined();
+});
 
 test("project picker offers creation first and adds the created project for reuse", async () => {
   const projects = [{ id: "old", name: "CineMotion" }];

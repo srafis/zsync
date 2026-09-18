@@ -6,7 +6,7 @@ import { pickEntries, type PickerRow } from "./entry-picker.ts"
 import * as p from "@clack/prompts"
 import { createClockify, createZoho, loadConfig } from "./api.ts"
 import { openStore, prepare, commit } from "./sync.ts"
-import { cleanText, dateRange, entryInput, inRange, ranges } from "./dates.ts"
+import { attendanceTimestamps, cleanText, dateRange, entryInput, inRange, ranges } from "./dates.ts"
 import type { RangeName } from "./dates.ts"
 import { accountScope } from "./types.ts"
 import type { Entry, Job, Project } from "./types.ts"
@@ -73,10 +73,17 @@ export async function chooseProject(
 	return project
 }
 
+export function attendanceAction(argv: readonly string[]): "checkIn" | "checkOut" | undefined {
+	if (argv.length !== 1) return undefined
+	if (argv[0] === "sheron") return "checkIn"
+	if (argv[0] === "sheroff") return "checkOut"
+	return undefined
+}
+
 export async function main(argv = process.argv.slice(2)): Promise<void> {
 	if (argv.includes("--help") || argv.includes("-h")) {
 		console.log(
-			`zsync — sync selected Clockify entries to Zoho People\n\nUsage: zsync [--demo | --connect | --help | --version]\n\nChoose a date range, select entries, review mappings, then confirm.\nNew, changed and deleted entries are checked by default. No background automation.\n\nRequired environment:\n  CLOCKIFY_API_KEY, CLOCKIFY_USER_ID, CLOCKIFY_WORKSPACE_ID\n  ZOHO_CLIENT_ID, ZOHO_CLIENT_SECRET\n\nZoho authorization is guided on first run. --connect reconnects.\nOptional: ZOHO_REFRESH_TOKEN, ZOHO_EMPLOYEE_ID, ZOHO_REGION, ZSYNC_TIMEZONE, ZSYNC_STATE_DIR, ZOHO_DATE_FORMAT\n\n--demo uses fictional data and never contacts either service.`,
+			`zsync — sync selected Clockify entries to Zoho People\n\nUsage: zsync [sheron | sheroff | --demo | --connect | --help | --version]\n\nzsync sheron  Check in to Zoho People now\nzsync sheroff  Check out of Zoho People now\n\nChoose a date range, select entries, review mappings, then confirm.\nNew, changed and deleted entries are checked by default. No background automation.\n\nRequired environment:\n  CLOCKIFY_API_KEY, CLOCKIFY_USER_ID, CLOCKIFY_WORKSPACE_ID\n  ZOHO_CLIENT_ID, ZOHO_CLIENT_SECRET\n\nZoho authorization is guided on first run. --connect reconnects.\nOptional: ZOHO_REFRESH_TOKEN, ZOHO_EMPLOYEE_ID, ZOHO_REGION, ZSYNC_TIMEZONE, ZSYNC_STATE_DIR, ZOHO_DATE_FORMAT\n\n--demo uses fictional data and never contacts either service.`,
 		)
 		return
 	}
@@ -84,12 +91,22 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
 		console.log(version)
 		return
 	}
-	if (argv.some(arg => arg !== "--demo" && arg !== "--connect"))
+	const action = attendanceAction(argv)
+	if (!action && argv.some(arg => arg !== "--demo" && arg !== "--connect"))
 		throw new Error("Unknown argument. Run zsync --help.")
 	if (!process.stdin.isTTY || !process.stdout.isTTY)
 		throw new Error(
 			"zsync needs an interactive terminal. Run zsync --help for setup.",
 		)
+	if (action) {
+		const config = await connectZoho(loadConfig())
+		const zoho = createZoho(config)
+		const timestamps = attendanceTimestamps(config.timezone)
+		const label = action === "checkIn" ? "check-in" : "check-out"
+		await busy(`Recording Zoho ${label}`, () => zoho.recordAttendance(action, timestamps.local, timestamps.utc))
+		console.log(`Zoho ${label} recorded at ${timestamps.local}.`)
+		return
+	}
 	p.intro("zsync · Clockify → Zoho People")
 	const demo = argv.includes("--demo")
 		? await import("./demo.ts").then(m => m.demoServices())

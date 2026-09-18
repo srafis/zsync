@@ -32,6 +32,23 @@ export function dateRange(name: RangeName, zone: string, now = Temporal.Now.inst
   };
 }
 
+export function attendanceTimestamps(zone: string, now = Temporal.Now.instant().toString()): { local: string; utc: string } {
+  const instant = Temporal.Instant.from(now);
+  const local = instant.toZonedDateTimeISO(zone);
+  const utc = instant.toZonedDateTimeISO('UTC');
+  const format = (value: Temporal.ZonedDateTime, utcOrder: boolean) => {
+    const pad = (part: number) => String(part).padStart(2, '0');
+    return utcOrder
+      ? `${value.year}-${pad(value.month)}-${pad(value.day)} ${pad(value.hour)}:${pad(value.minute)}:${pad(value.second)}`
+      : `${pad(value.day)}/${pad(value.month)}/${value.year} ${pad(value.hour)}:${pad(value.minute)}:${pad(value.second)}`;
+  };
+  return { local: format(local, false), utc: format(utc, true) };
+}
+
+export function attendanceTimestamp(zone: string, now = Temporal.Now.instant().toString()): string {
+  return attendanceTimestamps(zone, now).local;
+}
+
 // Entries belong to their local start date, even when they end the next day.
 // This keeps one stable source ID per log across overlapping date selections.
 export function entryInput(entry: Entry, projectId: string, jobId: string, employeeId: string, zone: string, source?: { workspaceId: string; userId: string }): LogInput {

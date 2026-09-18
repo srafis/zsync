@@ -104,6 +104,115 @@ describe("Clockify client", () => {
 });
 
 describe("Zoho client", () => {
+  test("records attendance with the configured employee and local timestamp", async () => {
+    const calls: Array<{ url: string; method?: string; body: string }> = [];
+    const zoho = createZoho(config, { sleep: async () => {}, fetch: async (input, init) => {
+      const url = String(input);
+      if (url.includes("/oauth/v2/token")) return json({ access_token: "access", expires_in: 3600 });
+      calls.push({ url, method: init?.method, body: String(init?.body) });
+      return json({ status: "success", data: { total_count: 1, success_count: 1, skipped_empolyee_info: [] } });
+    } });
+
+    await zoho.recordAttendance("checkIn", "11/09/2026 17:30:05");
+    await zoho.recordAttendance("checkOut", "11/09/2026 18:30:06");
+
+    expect(calls).toHaveLength(2);
+    expect(calls[0]!.url).toEndWith("/people/api/v3/attendance/entries");
+    expect(calls[0]!.method).toBe("POST");
+    const checkIn = new URLSearchParams(calls[0]!.body);
+    expect(checkIn.get("datetime_format")).toBe("yyyy-MM-dd HH:mm:ss");
+    expect(checkIn.get("entries_timezone")).toBe("Asia/Kolkata");
+    expect(checkIn.get("storage_timezone")).toBe("Asia/Kolkata");
+    expect(JSON.parse(checkIn.get("punch_details")!)).toEqual([{ employee_id: "employee", punch_in: "2026-09-11 17:30:05" }]);
+    const checkOut = new URLSearchParams(calls[1]!.body);
+    expect(JSON.parse(checkOut.get("punch_details")!)).toEqual([{ employee_id: "employee", punch_out: "2026-09-11 18:30:06" }]);
+  });
+
+  test("uses the employee record ID for v3 attendance", async () => {
+    let body = "";
+    const zoho = createZoho({ ...config, zohoEmail: "me@example.com" }, { sleep: async () => {}, fetch: async (input, init) => {
+      if (String(input).includes("/oauth/v2/token")) return json({ access_token: "access", expires_in: 3600 });
+      body = String(init?.body);
+      return json({ status: "success", data: { total_count: 1, success_count: 1, skipped_empolyee_info: [] } });
+    } });
+    await zoho.recordAttendance("checkIn", "11/09/2026 17:30:05");
+    const form = new URLSearchParams(body);
+    expect(JSON.parse(form.get("punch_details")!)).toEqual([{ employee_id: "employee", punch_in: "2026-09-11 17:30:05" }]);
+  });
+
+  test("submits the original instant in UTC and stores it in the configured timezone", async () => {
+    let body = "";
+    const zoho = createZoho({ ...config, timezone: "America/New_York" }, { sleep: async () => {}, fetch: async (input, init) => {
+      if (String(input).includes("/oauth/v2/token")) return json({ access_token: "access", expires_in: 3600 });
+      body = String(init?.body);
+      return json({ status: "success", data: { total_count: 1, success_count: 1, skipped_empolyee_info: [] } });
+    } });
+    await zoho.recordAttendance("checkIn", "01/11/2026 01:30:06", "2026-11-01 05:30:06");
+    const form = new URLSearchParams(body);
+    expect(form.get("entries_timezone")).toBe("UTC");
+    expect(form.get("storage_timezone")).toBe("America/New_York");
+    expect(JSON.parse(form.get("punch_details")!)).toEqual([{ employee_id: "employee", punch_in: "2026-11-01 05:30:06" }]);
+  });
+
+  test("falls back to the legacy attendance endpoint when v3 is unavailable", async () => {
+    const calls: string[] = [];
+    const zoho = createZoho({ ...config, zohoEmail: "me@example.com" }, { sleep: async () => {}, fetch: async (input, init) => {
+      const url = String(input);
+      if (url.includes("/oauth/v2/token")) return json({ access_token: "access", expires_in: 3600 });
+      calls.push(url);
+      if (url.endsWith("/people/api/v3/attendance/entries")) return new Response("Not found", { status: 404 });
+      expect(url).toEndWith("/people/api/attendance");
+      expect(init?.method).toBe("POST");
+      const form = new URLSearchParams(String(init?.body));
+      expect(form.get("emailId")).toBe("me@example.com");
+      expect(form.get("checkIn")).toBe("11/09/2026 17:30:05");
+      return json([{ response: "success" }]);
+    } });
+    await zoho.recordAttendance("checkIn", "11/09/2026 17:30:05");
+    expect(calls).toHaveLength(2);
+  });
+
+  test("uses the attendance EmployeeID for the legacy fallback when email is unavailable", async () => {
+    const zoho = createZoho({ ...config, zohoEmail: undefined, zohoAttendanceEmployeeId: "HRM02" }, { sleep: async () => {}, fetch: async (input, init) => {
+      const url = String(input);
+      if (url.includes("/oauth/v2/token")) return json({ access_token: "access", expires_in: 3600 });
+      if (url.endsWith("/people/api/v3/attendance/entries")) return new Response("Not found", { status: 404 });
+      const form = new URLSearchParams(String(init?.body));
+      expect(form.get("empId")).toBe("HRM02");
+      return json([{ response: "success" }]);
+    } });
+    await zoho.recordAttendance("checkIn", "11/09/2026 17:30:05");
+  });
+
+  test("rejects malformed attendance timestamps and API errors", async () => {
+    let writes = 0;
+    const zoho = createZoho(config, { sleep: async () => {}, fetch: async input => {
+      if (String(input).includes("/oauth/v2/token")) return json({ access_token: "access", expires_in: 3600 });
+      writes++;
+      return json({ status: "failure", message: "Attendance denied" });
+    } });
+    await expect(zoho.recordAttendance("checkIn", "2026-09-11T17:30:05Z")).rejects.toThrow("dd/MM/yyyy HH:mm:ss");
+    expect(writes).toBe(0);
+    await expect(zoho.recordAttendance("checkIn", "11/09/2026 17:30:05")).rejects.toThrow("Attendance denied");
+    expect(writes).toBe(1);
+  });
+
+  test("rejects v3 responses that skip the employee instead of reporting success", async () => {
+    const zoho = createZoho(config, { sleep: async () => {}, fetch: async input => {
+      if (String(input).includes("/oauth/v2/token")) return json({ access_token: "access", expires_in: 3600 });
+      return json({ status: "success", message: "Request processed successfully.", data: { success_count: 0, skipped_empolyee_info: ["employee"] } });
+    } });
+    await expect(zoho.recordAttendance("checkIn", "11/09/2026 17:30:05")).rejects.toThrow("no attendance entry was recorded; skipped employee(s): employee");
+  });
+
+  test("rejects a v3 success envelope without the documented result counts", async () => {
+    const zoho = createZoho(config, { sleep: async () => {}, fetch: async input => {
+      if (String(input).includes("/oauth/v2/token")) return json({ access_token: "access", expires_in: 3600 });
+      return json({ status: "success", message: "Request processed successfully." });
+    } });
+    await expect(zoho.recordAttendance("checkIn", "11/09/2026 17:30:05")).rejects.toThrow("malformed response");
+  });
+
   test("refreshes once, paginates jobs and logs, and preserves descriptions", async () => {
     let tokenCalls = 0;
     const fetcher = async (input: string | URL | Request, init?: RequestInit) => {

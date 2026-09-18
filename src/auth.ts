@@ -7,9 +7,10 @@ import { createServer } from 'node:http';
 import { ZOHO_REGIONS } from './api.ts';
 import type { Config } from './types.ts';
 
-const scopes = 'ZOHOPEOPLE.timetracker.ALL,ZOHOPEOPLE.forms.READ,ZOHOPEOPLE.forms.CREATE,AaaServer.profile.READ';
+const scopes = 'ZOHOPEOPLE.timetracker.ALL,ZOHOPEOPLE.attendance.ALL,ZOHOPEOPLE.forms.READ,ZOHOPEOPLE.forms.CREATE,AaaServer.profile.READ';
 const redirect = 'http://localhost:8765/callback';
-type SavedAuth = { region: string; refreshToken: string; employeeId: string };
+type SavedAuth = { region: string; refreshToken: string; employeeId: string; attendanceEmployeeId?: string; email?: string };
+type EmployeeIdentity = { recordId: string; employeeId: string };
 function answer<T>(value: T | symbol): T {
   if (p.isCancel(value)) throw new Error('Zoho setup cancelled.');
   return value as T;
@@ -25,7 +26,7 @@ export async function readAuth(config: Config): Promise<SavedAuth | undefined> {
   let value: SavedAuth;
   try { value = JSON.parse(text); }
   catch { throw new Error('Saved Zoho authentication is invalid. Run zsync --connect to reconnect.'); }
-  if (!value || !ZOHO_REGIONS[value.region] || typeof value.refreshToken !== 'string' || !value.refreshToken || typeof value.employeeId !== 'string')
+  if (!value || !ZOHO_REGIONS[value.region] || typeof value.refreshToken !== 'string' || !value.refreshToken || typeof value.employeeId !== 'string' || (value.attendanceEmployeeId !== undefined && (typeof value.attendanceEmployeeId !== 'string' || !value.attendanceEmployeeId)) || (value.email !== undefined && (typeof value.email !== 'string' || !value.email)))
     throw new Error('Saved Zoho authentication is invalid. Run zsync --connect to reconnect.');
   return value;
 }
@@ -124,7 +125,9 @@ export async function connectZoho(config: Config, reconnect = false): Promise<Co
   const sameRegion = saved?.region === region;
   let refreshToken = reconnect ? '' : config.zohoRefreshToken || (sameRegion ? saved?.refreshToken : '') || '';
   let employeeId = reconnect ? '' : config.zohoEmployeeId || (sameRegion && !config.zohoRefreshToken ? saved?.employeeId : '') || '';
-  if (refreshToken && employeeId) return { ...config, zohoRegion: region, zohoRefreshToken: refreshToken, zohoEmployeeId: employeeId };
+  let attendanceEmployeeId = reconnect ? '' : config.zohoAttendanceEmployeeId?.trim() || (sameRegion && !config.zohoRefreshToken ? saved?.attendanceEmployeeId : '') || '';
+  let email = config.zohoEmail?.trim() || (sameRegion && !config.zohoRefreshToken ? saved?.email : '') || '';
+  if (refreshToken && employeeId && attendanceEmployeeId) return { ...config, zohoRegion: region, zohoRefreshToken: refreshToken, zohoEmployeeId: employeeId, zohoAttendanceEmployeeId: attendanceEmployeeId, ...(email ? { zohoEmail: email } : {}) };
   let accessToken: string;
   if (!refreshToken) {
     let code: string;
@@ -152,38 +155,68 @@ export async function connectZoho(config: Config, reconnect = false): Promise<Co
     if (typeof tokens.access_token !== 'string') throw new Error('Zoho authorization expired or was revoked. Run zsync --connect.');
     accessToken = tokens.access_token;
   }
-  await saveAuth(config, { region, refreshToken, employeeId });
-  if (!employeeId) {
+  if (!email || !employeeId || !attendanceEmployeeId) {
     try {
-    const headers = { Authorization: `Zoho-oauthtoken ${accessToken}` };
-    const profile = await request(`https://${hosts.accounts}/oauth/user/info`, { headers });
-    const email = profile.Email || profile.email;
-    if (typeof email !== 'string' || !email) throw new Error('Zoho did not return your email. Reconnect with the profile scope.');
-    const records = await request(`https://${hosts.people}/api/forms/employee/getRecords?${new URLSearchParams({ searchParams: JSON.stringify({ searchField: 'EmailID', searchOperator: 'Is', searchText: email }) })}`, { headers });
-    employeeId = employeeRecordId(records, email);
+      const headers = { Authorization: `Zoho-oauthtoken ${accessToken}` };
+      if (!email) {
+        const profile = await request(`https://${hosts.accounts}/oauth/user/info`, { headers });
+        const profileEmail = profile.Email || profile.email;
+        if (typeof profileEmail !== 'string' || !profileEmail) throw new Error('Zoho did not return your email. Reconnect with the profile scope.');
+        email = profileEmail;
+      }
+      if (!employeeId || !attendanceEmployeeId) {
+        const records = await request(`https://${hosts.people}/api/forms/employee/getRecords?${new URLSearchParams({ searchParams: JSON.stringify({ searchField: 'EmailID', searchOperator: 'Is', searchText: email }) })}`, { headers });
+        const identity = employeeIdentity(records, email);
+        if (!employeeId) employeeId = identity.recordId;
+        if (!attendanceEmployeeId) attendanceEmployeeId = identity.employeeId;
+      }
     } catch {
-      p.log.warn('Automatic employee lookup was unavailable. Enter your Zoho People employee record ID (ERECNO), not your display employee number.');
-      employeeId = answer(await p.text({ message: 'Employee record ID', validate: value => /^\d+$/.test(value?.trim() ?? '') ? undefined : 'Enter the numeric employee record ID.' })).trim();
+      if (!employeeId) {
+        p.log.warn('Automatic employee lookup was unavailable. Enter your Zoho People employee record ID (ERECNO), not your display employee number.');
+        employeeId = answer(await p.text({ message: 'Employee record ID', validate: value => /^\d+$/.test(value?.trim() ?? '') ? undefined : 'Enter the numeric employee record ID.' })).trim();
+      }
+      if (!attendanceEmployeeId) {
+        p.log.warn('Automatic EmployeeID lookup was unavailable. Enter the employee number shown in your Zoho People employee record, such as HRM02.');
+        attendanceEmployeeId = answer(await p.text({ message: 'Employee ID', validate: value => value?.trim() ? undefined : 'Enter the employee ID.' })).trim();
+      }
     }
   }
-  await saveAuth(config, { region, refreshToken, employeeId });
+  await saveAuth(config, { region, refreshToken, employeeId, attendanceEmployeeId, ...(email ? { email } : {}) });
   p.log.success('Zoho connected. Authentication saved for future runs.');
-  return { ...config, zohoRegion: region, zohoRefreshToken: refreshToken, zohoEmployeeId: employeeId };
+  return { ...config, zohoRegion: region, zohoRefreshToken: refreshToken, zohoEmployeeId: employeeId, zohoAttendanceEmployeeId: attendanceEmployeeId, ...(email ? { zohoEmail: email } : {}) };
 }
 
-export function employeeRecordId(data: unknown, email: string): string {
-  const ids = new Set<string>();
+function employeeCandidates(data: unknown, email: string): Array<{ recordId: string; employeeId?: string }> {
+  const candidates = new Map<string, { recordId: string; employeeId?: string }>();
   function visit(value: any, recordKey?: string): void {
     if (!value || typeof value !== 'object') return;
     const entries = Object.entries(value);
     const matches = entries.some(([key, v]) => /^(emailid|email|employeemailalias)$/i.test(key) && typeof v === 'string' && v.toLowerCase() === email.toLowerCase());
-    if (matches && recordKey) ids.add(recordKey);
-    if (matches && !recordKey) for (const [key, id] of entries) {
-      if (/^(recordid|erecno|zoho_id)$/i.test(key) && typeof id === 'string' && /^\d+$/.test(id)) ids.add(id);
+    let id = recordKey;
+    if (matches && !id) for (const [key, value] of entries) {
+      if (/^(recordid|erecno|zoho_id)$/i.test(key) && (typeof value === 'string' || typeof value === 'number') && /^\d+$/.test(String(value))) {
+        id = String(value);
+        break;
+      }
+    }
+    if (matches && id) {
+      const employee = entries.find(([key, value]) => /^(employeeid|employee_id)$/i.test(key) && (typeof value === 'string' || typeof value === 'number') && String(value).trim());
+      candidates.set(id, { recordId: id, ...(employee ? { employeeId: String(employee[1]).trim() } : {}) });
     }
     for (const [key, child] of entries) visit(child, /^\d{10,}$/.test(key) ? key : recordKey);
   }
   visit(data);
-  if (ids.size !== 1) throw new Error('Could not identify one matching People employee. Set ZOHO_EMPLOYEE_ID to your employee record ID or ask your administrator to check employee API access.');
-  return [...ids][0]!;
+  return [...candidates.values()];
+}
+
+export function employeeRecordId(data: unknown, email: string): string {
+  const candidates = employeeCandidates(data, email);
+  if (candidates.length !== 1) throw new Error('Could not identify one matching People employee. Set ZOHO_EMPLOYEE_ID to your employee record ID or ask your administrator to check employee API access.');
+  return candidates[0]!.recordId;
+}
+
+export function employeeIdentity(data: unknown, email: string): EmployeeIdentity {
+  const candidates = employeeCandidates(data, email);
+  if (candidates.length !== 1 || !candidates[0]!.employeeId) throw new Error('Could not identify one matching People employee ID. Ask your administrator to check employee API access.');
+  return { recordId: candidates[0]!.recordId, employeeId: candidates[0]!.employeeId };
 }

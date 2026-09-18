@@ -1,8 +1,8 @@
 import { expect, test } from 'bun:test';
-import { mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { authPath, callbackCode, connectZoho, employeeRecordId, readAuth, saveAuth } from './auth.ts';
+import { authPath, callbackCode, connectZoho, employeeIdentity, employeeRecordId, readAuth, saveAuth } from './auth.ts';
 import { loadConfig } from './api.ts';
 
 test('five shell variables suffice; private saved auth completes subsequent runs', async () => {
@@ -12,14 +12,38 @@ test('five shell variables suffice; private saved auth completes subsequent runs
   try {
     expect(config.zohoRefreshToken).toBe('');
     expect(await readAuth(config)).toBeUndefined();
-    await saveAuth(config, { region: 'in', refreshToken: 'private-token', employeeId: '123' });
+    await saveAuth(config, { region: 'in', refreshToken: 'private-token', employeeId: '123', attendanceEmployeeId: 'HRM02', email: 'me@example.com' });
     expect((await stat(authPath(config))).mode & 0o777).toBe(0o600);
-    expect(await connectZoho(config)).toMatchObject({ zohoRegion: 'in', zohoRefreshToken: 'private-token', zohoEmployeeId: '123' });
+    expect(await connectZoho(config)).toMatchObject({ zohoRegion: 'in', zohoRefreshToken: 'private-token', zohoEmployeeId: '123', zohoAttendanceEmployeeId: 'HRM02', zohoEmail: 'me@example.com' });
     expect(await readAuth({ ...config, zohoClientId: 'different' })).toBeUndefined();
     await writeFile(authPath(config), 'corrupt-private-token');
     await expect(readAuth(config)).rejects.toThrow('Run zsync --connect');
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
+
+test('older saved auth is backfilled with the authorized email', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'zsync-auth-email-test-'));
+  const config = loadConfig({ CLOCKIFY_API_KEY: 'key', CLOCKIFY_USER_ID: 'user', CLOCKIFY_WORKSPACE_ID: 'workspace',
+    ZOHO_CLIENT_ID: 'client', ZOHO_CLIENT_SECRET: 'secret', ZSYNC_STATE_DIR: directory });
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async input => {
+    const url = String(input);
+    if (url.includes('/oauth/v2/token')) return new Response(JSON.stringify({ access_token: 'access', expires_in: 3600 }));
+    if (url.includes('/oauth/user/info')) return new Response(JSON.stringify({ Email: 'me@example.com' }));
+    if (url.includes('/forms/employee/getRecords')) return new Response(JSON.stringify({ response: { result: [{ '759415000001146009': [{ EmailID: 'me@example.com', EmployeeID: 'HRM02' }] }] } }));
+    throw new Error(`Unexpected request ${url}`);
+  }) as typeof globalThis.fetch;
+  try {
+    await saveAuth(config, { region: 'com', refreshToken: 'private-token', employeeId: '123' });
+    const connected = await connectZoho(config);
+    expect(connected).toMatchObject({ zohoEmail: 'me@example.com', zohoAttendanceEmployeeId: 'HRM02' });
+    expect(JSON.parse(await readFile(authPath(config), 'utf8'))).toMatchObject({ email: 'me@example.com', attendanceEmployeeId: 'HRM02' });
+  } finally {
+    globalThis.fetch = originalFetch;
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('callback rejects wrong state, foreign redirect, and denied consent', () => {
   expect(callbackCode('http://localhost:8765/callback?state=one&code=code', 'one')).toBe('code');
   for (const url of ['http://localhost:8765/callback?state=two&code=code', 'https://evil.test/callback?state=one&code=code', 'http://localhost:8765/callback?state=one&error=denied'])
@@ -30,6 +54,10 @@ test('employee discovery preserves large IDs and rejects ambiguous matches', () 
   expect(employeeRecordId(data, 'ME@example.com')).toBe('759415000001146009');
   expect(() => employeeRecordId(data, 'someone@example.com')).toThrow();
   expect(() => employeeRecordId([{ EmailID: 'me@example.com', recordId: '123' }, { EmailID: 'me@example.com', recordId: '456' }], 'me@example.com')).toThrow();
+});
+test('employee discovery returns the record ID and EmployeeID separately', () => {
+  const data = { response: { result: [{ '759415000001146009': [{ EmailID: 'me@example.com', EmployeeID: 'HRM02' }] }] } };
+  expect(employeeIdentity(data, 'ME@example.com')).toEqual({ recordId: '759415000001146009', employeeId: 'HRM02' });
 });
 
 test('loopback listener ignores foreign state, accepts callback, and closes', async () => {

@@ -8,6 +8,9 @@ const PAGE_SIZE = 200;
 const MAX_MINUTES = 24 * 60;
 const REQUEST_TIMEOUT_MS = 30_000;
 const ZOHO_WRITE_INTERVAL_MS = 3_000;
+const ATTENDANCE_DATE_FORMAT = "yyyy-MM-dd HH:mm:ss";
+const LEGACY_ATTENDANCE_DATE_FORMAT = "dd/MM/yyyy HH:mm:ss";
+const ATTENDANCE_WRITE_INTERVAL_MS = 6_000;
 
 type Fetcher = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 type Sleep = (milliseconds: number) => Promise<void>;
@@ -54,20 +57,28 @@ function redact(value: string, secrets: readonly string[]): string {
 }
 
 function responseMessage(body: unknown): string {
+  if (typeof body === "string") return body;
+  if (Array.isArray(body)) {
+    const messages = body.map(responseMessage).filter(message => message !== "request failed" && message !== "malformed response");
+    return messages.join("; ") || "request failed";
+  }
   if (!isRecord(body)) return "malformed response";
   const response = isRecord(body.response) ? body.response : body;
   const parts: string[] = [];
   if (typeof response.message === "string") parts.push(response.message);
+  if (typeof response.msg === "string") parts.push(response.msg);
   if (typeof response.error === "string") parts.push(response.error);
   if (typeof response.error_description === "string") parts.push(response.error_description);
-  if (Array.isArray(response.errors)) {
-    for (const error of response.errors) {
+  const errors = Array.isArray(response.errors) ? response.errors : isRecord(response.errors) ? [response.errors] : [];
+  if (errors.length) {
+    for (const error of errors) {
       if (!isRecord(error)) continue;
       const code = error.code ?? error.errorCode;
       const message = typeof error.message === "string" ? error.message : "unknown error";
       parts.push(code === undefined ? message : `${String(code)}: ${message}`);
     }
   }
+  if (!parts.length && typeof response.response === "string") parts.push(response.response);
   return parts.join("; ") || "request failed";
 }
 
@@ -354,6 +365,57 @@ function zohoStatus(body: unknown, label: string, secrets: readonly string[], wr
   return response;
 }
 
+function attendanceStatus(body: unknown, label: string, secrets: readonly string[]): void {
+  const values = Array.isArray(body) ? body : [body];
+  if (!values.length) throw new Error(`${label}: malformed response`);
+  for (const value of values) {
+    if (value === "success" || value === "Success") return;
+    if (!isRecord(value)) continue;
+    const response = isRecord(value.response) ? value.response : value;
+    const status = response.status ?? value.status;
+    const marker = typeof value.response === "string" ? value.response.toLowerCase() : "";
+    if (status === 0 || status === "0" || status === "success" || status === "Success" || marker === "success") return;
+    if (String(status) === "1" || marker === "failure" || marker === "failed" || marker === "error") {
+      const message = `${label}: ${redact(responseMessage(value), secrets)}`;
+      throw new RejectedWriteError(/permission denied/i.test(message)
+        ? `${message}. Check that your Zoho People role allows Attendance API access.`
+        : message);
+    }
+  }
+  if (!values.some(isRecord)) throw new Error(`${label}: malformed response`);
+  const message = `${label}: ${redact(responseMessage(body), secrets)}`;
+  throw new Error(message);
+}
+
+function attendanceV3Status(body: unknown, label: string, secrets: readonly string[]): void {
+  if (!isRecord(body)) throw new Error(`${label}: malformed response`);
+  const status = typeof body.status === "string" ? body.status.toLowerCase() : body.status;
+  const data = body.data;
+  if (status === "success" && !isRecord(data)) throw new Error(`${label}: malformed response`);
+  const successCount = isRecord(data) ? Number(data.success_count) : NaN;
+  const totalCount = isRecord(data) ? Number(data.total_count) : NaN;
+  const skipped = isRecord(data) ? data.skipped_empolyee_info ?? data.skipped_employee_info ?? data.skippedEmpInfo : undefined;
+  const skippedCount = Array.isArray(skipped) ? skipped.length : 0;
+  if (status === "success" && successCount === 1 && totalCount === 1 && skippedCount === 0) return;
+  if (status === "success" && successCount === 0) {
+    const skippedText = Array.isArray(skipped) && skipped.length ? `; skipped employee(s): ${skipped.map(String).join(", ")}` : "";
+    throw new RejectedWriteError(`${label}: no attendance entry was recorded${skippedText}. Verify the Zoho EmployeeID and attendance permissions.`);
+  }
+  const message = `${label}: ${redact(responseMessage(body), secrets)}`;
+  if (/permission denied/i.test(message) || status === "failure" || status === "failed" || status === "error") {
+    throw new RejectedWriteError(/permission denied/i.test(message)
+      ? `${message}. Check that your Zoho People role allows Attendance API access.`
+      : message);
+  }
+  throw new Error(message);
+}
+
+function v3AttendanceTimestamp(timestamp: string): string {
+  const match = /^(\d{2})\/(\d{2})\/(\d{4}) (\d{2}:\d{2}:\d{2})$/.exec(timestamp);
+  if (!match) throw new Error(`Zoho attendance timestamp must use ${LEGACY_ATTENDANCE_DATE_FORMAT}`);
+  return `${match[3]}-${match[2]}-${match[1]} ${match[4]}`;
+}
+
 function formBody(fields: Record<string, string>): URLSearchParams {
   const body = new URLSearchParams();
   for (const [name, value] of Object.entries(fields)) body.set(name, value);
@@ -457,7 +519,7 @@ function logFields(input: LogInput, config: Config): Record<string, string> {
   };
 }
 
-export function createZoho(config: Config, options: ApiOptions = {}): Destination & { validate(): Promise<void>; listProjects(): Promise<Project[]>; createProject(name: string): Promise<Project>; listJobs(): Promise<Job[]>; createJob(name: string, projectId: string): Promise<Job>; deleteLog(id: string): Promise<void> } {
+export function createZoho(config: Config, options: ApiOptions = {}): Destination & { validate(): Promise<void>; listProjects(): Promise<Project[]>; createProject(name: string): Promise<Project>; listJobs(): Promise<Job[]>; createJob(name: string, projectId: string): Promise<Job>; deleteLog(id: string): Promise<void>; recordAttendance(action: "checkIn" | "checkOut", timestamp: string, utcTimestamp?: string): Promise<void> } {
   const region = ZOHO_REGIONS[config.zohoRegion.toLowerCase()];
   if (!region) throw new Error(`Unsupported Zoho region ${config.zohoRegion}`);
   const { accounts, people } = region;
@@ -467,6 +529,7 @@ export function createZoho(config: Config, options: ApiOptions = {}): Destinatio
   const secrets = [config.zohoClientId, config.zohoClientSecret, config.zohoRefreshToken];
   const zohoFormat = dateFormat(config.zohoDateFormat ?? "yyyy-MM-dd");
   const apiBase = `https://${people}/people/api`;
+  const attendanceV3Base = `${apiBase}/v3`;
   let access: { token: string; expiresAt: number } | undefined;
   let refreshing: Promise<string> | undefined;
 
@@ -507,10 +570,10 @@ export function createZoho(config: Config, options: ApiOptions = {}): Destinatio
     }
   }
 
-  async function zohoRequest(path: string, init: RequestInit = {}, write = false, allowNotFound = false): Promise<unknown | null> {
+  async function zohoRequest(path: string, init: RequestInit = {}, write = false, allowNotFound = false, base = apiBase): Promise<unknown | null> {
     const request = async (token: string): Promise<RawResponse> => fetchRaw(
       fetcher,
-      `${apiBase}${path}`,
+      `${base}${path}`,
       { ...init, headers: { ...(init.headers as Record<string, string> | undefined), Authorization: `Zoho-oauthtoken ${token}` } },
       `Zoho ${path}`,
       secrets,
@@ -658,6 +721,54 @@ export function createZoho(config: Config, options: ApiOptions = {}): Destinatio
   }
 
   const writesRate: RateState = { lastAt: 0, queue: Promise.resolve() };
+  const attendanceRate: RateState = { lastAt: 0, queue: Promise.resolve() };
+
+  async function recordAttendance(action: "checkIn" | "checkOut", timestamp: string, utcTimestamp?: string): Promise<void> {
+    const email = config.zohoEmail?.trim();
+    const attendanceEmployeeId = config.zohoAttendanceEmployeeId?.trim() || config.zohoEmployeeId;
+    if (!attendanceEmployeeId) throw new Error("Zoho attendance requires an employee ID");
+    if (!/^\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}:\d{2}$/.test(timestamp)) {
+      throw new Error(`Zoho attendance timestamp must use ${LEGACY_ATTENDANCE_DATE_FORMAT}`);
+    }
+    const currentTimestamp = utcTimestamp ?? v3AttendanceTimestamp(timestamp);
+    if (!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(currentTimestamp)) {
+      throw new Error(`Zoho attendance UTC timestamp must use ${ATTENDANCE_DATE_FORMAT}`);
+    }
+    const entriesTimezone = utcTimestamp ? "UTC" : config.timezone;
+    await rateLimit(attendanceRate, ATTENDANCE_WRITE_INTERVAL_MS, sleep, async () => {
+      const details = [{
+        employee_id: attendanceEmployeeId,
+        [action === "checkIn" ? "punch_in" : "punch_out"]: currentTimestamp,
+      }];
+      try {
+        const body = await zohoRequest(
+          "/attendance/entries",
+          { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: formBody({
+            punch_details: JSON.stringify(details),
+            datetime_format: ATTENDANCE_DATE_FORMAT,
+            entries_timezone: entriesTimezone,
+            storage_timezone: config.timezone,
+          }) },
+          true,
+          false,
+          attendanceV3Base,
+        );
+        attendanceV3Status(body, "Zoho attendance", secrets);
+      } catch (error) {
+        if (!(error instanceof RejectedWriteError) || !/HTTP 404\b/.test(error.message)) throw error;
+        const body = await zohoRequest(
+          "/attendance",
+          { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: formBody({
+            dateFormat: LEGACY_ATTENDANCE_DATE_FORMAT,
+            ...(email ? { emailId: email } : { empId: attendanceEmployeeId }),
+            [action]: timestamp,
+          }) },
+          true,
+        );
+        attendanceStatus(body, "Zoho attendance", secrets);
+      }
+    });
+  }
 
   async function writeLog(path: string, fields: Record<string, string>, expectedId?: string): Promise<void | string> {
     const body = await zohoRequest(
@@ -694,5 +805,5 @@ export function createZoho(config: Config, options: ApiOptions = {}): Destinatio
     });
   }
 
-  return { validate: async () => { await Promise.all([listProjects(), listJobs()]); }, listProjects, createProject, listJobs, createJob, listLogs, getLog, createLog, updateLog, deleteLog };
+  return { validate: async () => { await Promise.all([listProjects(), listJobs()]); }, listProjects, createProject, listJobs, createJob, listLogs, getLog, createLog, updateLog, deleteLog, recordAttendance };
 }

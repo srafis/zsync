@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { dateRange, entryInput, inRange, cleanText } from './dates.ts';
+import { attendanceTimestamp, attendanceTimestamps, dateRange, entryInput, inRange, cleanText } from './dates.ts';
 import type { Entry } from './types.ts';
 
 test('calendar windows use fractional offsets and Monday weeks', () => {
@@ -8,6 +8,11 @@ test('calendar windows use fractional offsets and Monday weeks', () => {
   expect(last.firstDate).toBe('2026-08-31');
   expect(last.lastDate).toBe('2026-09-06');
   expect(dateRange('this-month', 'Asia/Kolkata', '2026-09-11T12:00:00Z').firstDate).toBe('2026-09-01');
+});
+test('attendance timestamps use the configured local timezone', () => {
+  expect(attendanceTimestamp('Asia/Kolkata', '2026-09-11T12:00:05Z')).toBe('11/09/2026 17:30:05');
+  expect(attendanceTimestamp('America/New_York', '2026-11-01T05:30:06Z')).toBe('01/11/2026 01:30:06');
+  expect(attendanceTimestamps('America/New_York', '2026-11-01T05:30:06Z')).toEqual({ local: '01/11/2026 01:30:06', utc: '2026-11-01 05:30:06' });
 });
 test('yesterday handles a 23-hour daylight-saving day', () => {
   const range = dateRange('yesterday', 'America/New_York', '2026-03-09T12:00:00Z');
